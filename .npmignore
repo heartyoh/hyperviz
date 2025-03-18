@@ -1,0 +1,66 @@
+# 소스 코드와 설정 파일
+/src/
+/test/
+/docs/
+/examples/
+/scripts/
+/.github/
+.editorconfig
+.eslintrc
+.prettierrc
+.babelrc
+tsconfig.json
+jest.config.js
+rollup.config.js
+webpack.config.js
+
+# Git 관련 파일
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD 설정
+.travis.yml
+.gitlab-ci.yml
+.circleci/
+.github/workflows/
+
+# 테스트 관련 파일
+__tests__/
+__mocks__/
+*.spec.js
+*.test.js
+coverage/
+.nyc_output/
+
+# 로그 및 임시 파일
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+
+# 개발용 파일
+.vscode/
+.idea/
+.env
+.env.*
+*.swp
+*.swo
+
+# 빌드 관련 설정
+.parcel-cache/
+.cache/
+.webpack/
+
+# lerna 관련 파일
+lerna-debug.log
+
+# 기타 불필요 파일
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE.md 

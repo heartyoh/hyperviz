@@ -1,0 +1,54 @@
+# 소스 파일
+/src/
+
+# 개발 설정 파일
+tsconfig.json
+webpack.config.js
+
+# 빌드 결과물 (확장 프로그램은 별도로 배포되기 때문에)
+/dist/
+/build/
+
+# 테스트 파일
+/__tests__/
+/test/
+*.spec.ts
+*.test.ts
+
+# 문서 및 예제
+/docs/
+/examples/
+
+# 로그 파일
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 환경 변수
+.env
+.env.*
+
+# 에디터 설정
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# 임시 파일
+/temp/
+/tmp/
+*.tmp
+*.temp
+
+# 개발 도구 설정
+.eslintrc
+.prettierrc
+.browserslistrc
+
+# 기타
+.gitignore
+README.md
+CHANGELOG.md 
