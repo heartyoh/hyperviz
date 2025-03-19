@@ -1,0 +1,683 @@
+/**
+ * HyperViz 확장 프로그램 공통 스타일
+ */
+
+/* 기본 변수 */
+:root {
+  --color-primary: #4e6ef2;
+  --color-secondary: #7986cb;
+  --color-success: #4caf50;
+  --color-warning: #ffb74d;
+  --color-error: #ef5350;
+  --color-info: #64b5f6;
+
+  --color-background: #ffffff;
+  --color-background-secondary: #f5f5f5;
+  --color-text: #333333;
+  --color-text-secondary: #757575;
+  --color-border: #e0e0e0;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+
+  --border-radius-sm: 4px;
+  --border-radius-md: 6px;
+  --border-radius-lg: 8px;
+
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+}
+
+/* 다크 모드 변수 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-primary: #5c7cf9;
+    --color-secondary: #94a2e8;
+
+    --color-background: #1e1e1e;
+    --color-background-secondary: #2d2d2d;
+    --color-text: #e0e0e0;
+    --color-text-secondary: #b0b0b0;
+    --color-border: #3d3d3d;
+  }
+}
+
+/* 기본 리셋 */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+  background-color: var(--color-background);
+}
+
+/* 레이아웃 컴포넌트 */
+.container {
+  padding: var(--spacing-md);
+  width: 100%;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 -8px;
+}
+
+.col {
+  flex: 1;
+  padding: 0 8px;
+}
+
+.card {
+  background-color: var(--color-background);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+/* 공통 모니터링 레이아웃 */
+.worker-monitor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--color-background);
+}
+
+.worker-monitor-compact {
+  width: 350px;
+  overflow: hidden;
+  background-color: var(--color-background);
+  padding: var(--spacing-sm);
+}
+
+.monitor-header {
+  display: flex;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.monitor-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.monitor-sidebar {
+  width: 200px;
+  border-right: 1px solid var(--color-border);
+  padding: var(--spacing-md);
+  overflow-y: auto;
+}
+
+.monitor-content {
+  flex: 1;
+  padding: var(--spacing-md);
+  overflow-y: auto;
+}
+
+.section {
+  margin-bottom: var(--spacing-lg);
+}
+
+.section-heading {
+  margin-bottom: var(--spacing-md);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* 탭 컴포넌트 */
+.tabs {
+  display: flex;
+  margin-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tabs.vertical {
+  flex-direction: column;
+  border-bottom: none;
+}
+
+.tab-item {
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-secondary);
+  transition: all 0.2s;
+}
+
+.tabs.vertical .tab-item {
+  border-bottom: none;
+  border-left: 2px solid transparent;
+  margin-bottom: var(--spacing-xs);
+}
+
+.tab-item:hover {
+  color: var(--color-primary);
+}
+
+.tab-item.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 500;
+}
+
+.tabs.vertical .tab-item.active {
+  border-bottom-color: transparent;
+  border-left-color: var(--color-primary);
+  background-color: rgba(78, 110, 242, 0.05);
+}
+
+.tab-content {
+  padding: var(--spacing-sm) 0;
+}
+
+/* 연결 상태 컴포넌트 */
+.connection-status {
+  background-color: var(--color-background);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.connection-status-compact {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  background-color: var(--color-background-secondary);
+  margin-bottom: var(--spacing-md);
+}
+
+.status-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: var(--spacing-sm);
+}
+
+.status-connected .status-indicator {
+  background-color: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success);
+}
+
+.status-connecting .status-indicator {
+  background-color: var(--color-warning);
+  box-shadow: 0 0 8px var(--color-warning);
+  animation: pulse 1.5s infinite;
+}
+
+.status-disconnected .status-indicator {
+  background-color: var(--color-error);
+  box-shadow: 0 0 8px var(--color-error);
+}
+
+.status-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.status-row {
+  display: flex;
+  margin-bottom: var(--spacing-xs);
+}
+
+.status-label {
+  flex: 0 0 120px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.status-value {
+  flex: 1;
+  color: var(--color-text);
+}
+
+.status-actions {
+  margin-top: var(--spacing-md);
+}
+
+.connection-btn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-sm);
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+.connection-btn.connect {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.connection-btn.disconnect {
+  background-color: var(--color-error);
+  color: white;
+}
+
+.connection-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.connection-btn-small {
+  padding: 4px 8px;
+  border-radius: var(--border-radius-sm);
+  border: none;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  background-color: var(--color-primary);
+  color: white;
+  margin-left: auto;
+}
+
+/* 워커 테이블 컴포넌트 */
+.worker-table-container {
+  margin-bottom: var(--spacing-md);
+  overflow-x: auto;
+}
+
+.worker-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+}
+
+.worker-table th {
+  background-color: var(--color-background-secondary);
+  text-align: left;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.worker-table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.worker-table tr:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.worker-table.compact th,
+.worker-table.compact td {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.worker-table tr.selected {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-idle {
+  background-color: var(--color-success);
+  color: white;
+}
+
+.status-busy {
+  background-color: var(--color-warning);
+  color: white;
+}
+
+.status-error {
+  background-color: var(--color-error);
+  color: white;
+}
+
+.status-terminated {
+  background-color: var(--color-text-secondary);
+  color: white;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px;
+  margin: 0 2px;
+}
+
+/* 로그 뷰어 컴포넌트 */
+.log-viewer-container {
+  height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-sm);
+  background-color: var(--color-background);
+  margin-bottom: var(--spacing-md);
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.log-item {
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.log-timestamp {
+  color: var(--color-text-secondary);
+  margin-right: var(--spacing-sm);
+}
+
+.log-level {
+  display: inline-block;
+  width: 60px;
+  color: var(--color-text);
+  margin-right: var(--spacing-sm);
+}
+
+.log-worker-type,
+.log-worker-id {
+  margin-right: var(--spacing-sm);
+  color: var(--color-primary);
+}
+
+.log-message {
+  color: var(--color-text);
+}
+
+.log-debug {
+  color: var(--color-text-secondary);
+}
+
+.log-info {
+  color: var(--color-info);
+}
+
+.log-warn {
+  color: var(--color-warning);
+}
+
+.log-error {
+  color: var(--color-error);
+}
+
+/* 통계 대시보드 컴포넌트 */
+.stats-dashboard {
+  margin-bottom: var(--spacing-md);
+}
+
+.dashboard-title,
+.section-title {
+  margin-bottom: var(--spacing-md);
+  color: var(--color-text);
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: var(--spacing-sm);
+}
+
+.stats-grid {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.stats-card {
+  flex: 1;
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.stats-card.total {
+  background-color: rgba(78, 110, 242, 0.1);
+  border: 1px solid rgba(78, 110, 242, 0.3);
+}
+
+.stats-card.idle {
+  background-color: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.stats-card.busy {
+  background-color: rgba(255, 183, 77, 0.1);
+  border: 1px solid rgba(255, 183, 77, 0.3);
+}
+
+.stats-card.error {
+  background-color: rgba(239, 83, 80, 0.1);
+  border: 1px solid rgba(239, 83, 80, 0.3);
+}
+
+.stats-value {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: var(--spacing-xs);
+}
+
+.stats-label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.stats-table th {
+  text-align: left;
+  padding: var(--spacing-sm);
+  background-color: var(--color-background-secondary);
+  font-weight: 600;
+}
+
+.stats-table td {
+  padding: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.stats-chart {
+  margin-top: var(--spacing-md);
+}
+
+.chart-bar-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.chart-label {
+  flex: 0 0 100px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.chart-bar {
+  height: 20px;
+  background-color: var(--color-primary);
+  border-radius: var(--border-radius-sm);
+  position: relative;
+  min-width: 20px;
+  transition: width 0.3s ease;
+}
+
+.chart-value {
+  position: absolute;
+  right: 8px;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  height: 20px;
+  line-height: 20px;
+}
+
+.stats-dashboard-compact {
+  padding: var(--spacing-sm);
+  background-color: var(--color-background-secondary);
+  border-radius: var(--border-radius-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.stats-summary {
+  display: flex;
+  justify-content: space-between;
+}
+
+.stats-item {
+  text-align: center;
+  padding: 0 var(--spacing-sm);
+}
+
+/* 제어 패널 컴포넌트 */
+.control-panel {
+  background-color: var(--color-background);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.panel-title {
+  margin-bottom: var(--spacing-md);
+}
+
+.control-section {
+  margin-bottom: var(--spacing-md);
+}
+
+.settings-form {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.form-group.checkbox {
+  flex-direction: row;
+  align-items: center;
+}
+
+.form-group.checkbox label {
+  margin-left: 8px;
+  margin-bottom: 0;
+}
+
+.form-group input,
+.form-group select {
+  padding: 8px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-background);
+  color: var(--color-text);
+}
+
+.form-group input[type="checkbox"] {
+  width: auto;
+}
+
+.control-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+.control-btn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--border-radius-sm);
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.control-btn.terminate-all {
+  background-color: var(--color-error);
+}
+
+.control-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-panel-compact {
+  padding: var(--spacing-sm);
+}
+
+/* 빈 상태 표시 */
+.empty-state {
+  padding: var(--spacing-md);
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+/* 애니메이션 */
+@keyframes pulse {
+  0% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.5;
+  }
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+  .stats-grid {
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+
+  .stats-card {
+    flex: 0 0 calc(50% - var(--spacing-sm));
+    margin-bottom: var(--spacing-sm);
+  }
+}

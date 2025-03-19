@@ -2,172 +2,133 @@
  * HyperViz 크롬 확장 프로그램 - 배지 관리자
  */
 
-import logger from "./utils/logger";
+/**
+ * 배지 매니저
+ *
+ * 확장 프로그램 아이콘 배지 관리 모듈
+ */
+
+// 배지 설정 인터페이스
+interface BadgeConfig {
+  showWorkerCount: boolean;
+  colorByStatus: boolean;
+}
+
+// 배지 상태 인터페이스
+interface BadgeState {
+  connected?: boolean;
+  workerCount?: number;
+  busyWorkers?: number;
+  errorCount?: number;
+}
 
 /**
  * 배지 관리자 클래스
  * 탭 아이콘의 배지 텍스트와 색상을 관리
  */
 class BadgeManager {
-  /**
-   * 배지 텍스트 설정
-   */
-  public setBadgeText(tabId: number, text: string): void {
-    try {
-      // 유효한 탭 ID 검증
-      if (!this.isValidTabId(tabId)) {
-        logger.warn(
-          "유효하지 않은 탭 ID로 배지 텍스트 설정 시도",
-          "BadgeManager",
-          {
-            tabId,
-            text,
-          }
-        );
-        return;
-      }
+  private config: BadgeConfig = {
+    showWorkerCount: true,
+    colorByStatus: true,
+  };
 
-      chrome.action.setBadgeText({
-        tabId,
-        text,
-      });
+  private tabBadgeState: Map<number, BadgeState> = new Map();
+
+  /**
+   * 배지 매니저 초기화
+   * @param config 배지 설정
+   */
+  public initialize(config: Partial<BadgeConfig>): void {
+    this.config = { ...this.config, ...config };
+  }
+
+  /**
+   * 배지 상태 업데이트
+   * @param tabId 탭 ID
+   * @param state 배지 상태
+   */
+  public updateBadge(tabId: number, state: Partial<BadgeState>): void {
+    // 기존 상태와 병합
+    const currentState = this.tabBadgeState.get(tabId) || {};
+    const newState = { ...currentState, ...state };
+    this.tabBadgeState.set(tabId, newState);
+
+    // 배지 텍스트 및 색상 업데이트
+    this.updateBadgeText(tabId, newState);
+    this.updateBadgeColor(tabId, newState);
+  }
+
+  /**
+   * 배지 텍스트 업데이트
+   * @param tabId 탭 ID
+   * @param state 배지 상태
+   */
+  private updateBadgeText(tabId: number, state: BadgeState): void {
+    let text = "";
+
+    if (state.connected) {
+      if (this.config.showWorkerCount && state.workerCount !== undefined) {
+        text = state.workerCount.toString();
+      } else {
+        text = "✓";
+      }
+    } else {
+      text = "";
+    }
+
+    try {
+      chrome.action.setBadgeText({ text, tabId });
     } catch (error) {
-      logger.error("배지 텍스트 설정 중 오류", "BadgeManager", {
-        tabId,
-        text,
-        error,
-      });
+      console.error("배지 텍스트 설정 오류:", error);
     }
   }
 
   /**
-   * 배지 배경색 설정
+   * 배지 색상 업데이트
+   * @param tabId 탭 ID
+   * @param state 배지 상태
    */
-  public setBadgeBackgroundColor(
-    tabId: number,
-    color: string | chrome.action.ColorArray
-  ): void {
-    try {
-      // 유효한 탭 ID 검증
-      if (!this.isValidTabId(tabId)) {
-        logger.warn(
-          "유효하지 않은 탭 ID로 배지 배경색 설정 시도",
-          "BadgeManager",
-          {
-            tabId,
-            color,
-          }
-        );
-        return;
-      }
+  private updateBadgeColor(tabId: number, state: BadgeState): void {
+    let color = "#5c8aff"; // 기본 파란색
 
-      chrome.action.setBadgeBackgroundColor({
-        tabId,
-        color,
-      });
+    if (this.config.colorByStatus) {
+      if (!state.connected) {
+        color = "#888888"; // 회색 (연결 안됨)
+      } else if (state.errorCount && state.errorCount > 0) {
+        color = "#ff5252"; // 빨간색 (오류)
+      } else if (state.busyWorkers && state.busyWorkers > 0) {
+        color = "#ffa726"; // 주황색 (작업 중)
+      } else {
+        color = "#4caf50"; // 녹색 (정상)
+      }
+    }
+
+    try {
+      chrome.action.setBadgeBackgroundColor({ color, tabId });
     } catch (error) {
-      logger.error("배지 배경색 설정 중 오류", "BadgeManager", {
-        tabId,
-        color,
-        error,
-      });
+      console.error("배지 색상 설정 오류:", error);
     }
   }
 
   /**
-   * 배지 초기화 (텍스트 제거 및 기본 색상으로 변경)
+   * 탭의 배지 상태 가져오기
+   * @param tabId 탭 ID
    */
-  public clearBadge(tabId: number): void {
-    try {
-      // 유효한 탭 ID 검증
-      if (!this.isValidTabId(tabId)) {
-        logger.warn("유효하지 않은 탭 ID로 배지 초기화 시도", "BadgeManager", {
-          tabId,
-        });
-        return;
-      }
-
-      chrome.action.setBadgeText({
-        tabId,
-        text: "",
-      });
-      chrome.action.setBadgeBackgroundColor({
-        tabId,
-        color: "#5cb85c", // 기본 녹색
-      });
-    } catch (error) {
-      logger.error("배지 초기화 중 오류", "BadgeManager", {
-        tabId,
-        error,
-      });
-    }
+  public getBadgeState(tabId: number): BadgeState | undefined {
+    return this.tabBadgeState.get(tabId);
   }
 
   /**
-   * 워커 수에 따른 배지 업데이트
+   * 탭의 배지 상태 초기화
+   * @param tabId 탭 ID
    */
-  public updateWorkerCountBadge(tabId: number, workerCount: number): void {
+  public resetBadge(tabId: number): void {
+    this.tabBadgeState.delete(tabId);
+
     try {
-      // 유효한 탭 ID 검증
-      if (!this.isValidTabId(tabId)) {
-        logger.warn(
-          "유효하지 않은 탭 ID로 워커 수 배지 업데이트 시도",
-          "BadgeManager",
-          {
-            tabId,
-            workerCount,
-          }
-        );
-        return;
-      }
-
-      // 워커 수 텍스트 설정
-      const text = workerCount > 0 ? workerCount.toString() : "";
-      this.setBadgeText(tabId, text);
-
-      // 워커 수에 따라 색상 변경
-      let color = "#5cb85c"; // 녹색 (기본)
-
-      if (workerCount > 10) {
-        color = "#d9534f"; // 빨간색 (많은 워커)
-      } else if (workerCount > 5) {
-        color = "#f0ad4e"; // 노란색 (중간 워커 수)
-      }
-
-      this.setBadgeBackgroundColor(tabId, color);
+      chrome.action.setBadgeText({ text: "", tabId });
     } catch (error) {
-      logger.error("워커 수 배지 업데이트 중 오류", "BadgeManager", {
-        tabId,
-        workerCount,
-        error,
-      });
-    }
-  }
-
-  /**
-   * 오류 배지 표시
-   */
-  public showErrorBadge(tabId: number): void {
-    try {
-      // 유효한 탭 ID 검증
-      if (!this.isValidTabId(tabId)) {
-        logger.warn(
-          "유효하지 않은 탭 ID로 오류 배지 표시 시도",
-          "BadgeManager",
-          {
-            tabId,
-          }
-        );
-        return;
-      }
-
-      this.setBadgeText(tabId, "!");
-      this.setBadgeBackgroundColor(tabId, "#d9534f"); // 빨간색
-    } catch (error) {
-      logger.error("오류 배지 표시 중 오류", "BadgeManager", {
-        tabId,
-        error,
-      });
+      console.error("배지 초기화 오류:", error);
     }
   }
 

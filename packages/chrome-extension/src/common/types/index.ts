@@ -5,8 +5,13 @@
 // 로그 레벨 타입
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
-// 워커 상태 타입
-export type WorkerStatus = "idle" | "busy" | "error" | "terminated";
+// 워커 상태 enum
+export enum WorkerStatus {
+  IDLE = "idle",
+  BUSY = "busy",
+  ERROR = "error",
+  TERMINATED = "terminated",
+}
 
 // 로그 항목 인터페이스
 export interface LogEntry {
@@ -25,11 +30,14 @@ export interface WorkerInfo {
   id: string;
   type: string;
   status: WorkerStatus;
-  tasks: number;
+  tasks: Record<string, any>;
   performance: {
-    averageTaskTime: number;
-    completedTasks: number;
-    errors: number;
+    cpu?: number;
+    memory?: number;
+    lastActive?: number;
+    averageTaskTime?: number;
+    completedTasks?: number;
+    errors?: number;
   };
 }
 
