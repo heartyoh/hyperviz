@@ -15,6 +15,22 @@ interface TabInfo {
 // 타입 인터페이스 정의
 type MessageResponse = (response?: any) => void;
 
+// 워커풀 타입 정의
+interface WorkerPoolsMap {
+  [key: string]: any;
+}
+
+// 모니터 인터페이스 정의
+interface WorkerPoolMonitor {
+  initialized: boolean;
+  workerPools: WorkerPoolsMap;
+  logs: any[];
+  monitoringInterval: number | null;
+  init(): boolean;
+  hookLogger?(): void;
+  startMonitoring(interval?: number): boolean;
+}
+
 // 탭 정보 저장소
 const tabsWithWorkerPool = new Map<number, TabInfo>();
 
@@ -48,12 +64,56 @@ function initialize() {
   DevToolsConnection.setupDevToolsConnectionListeners();
 
   console.log("HyperViz 확장 프로그램 백그라운드 스크립트가 초기화되었습니다.");
+
+  // 필요한 권한 확인
+  checkRequiredPermissions();
+}
+
+// 필요한 권한 확인 함수
+async function checkRequiredPermissions() {
+  try {
+    // 스크립팅 권한 확인
+    const hasScriptingPermission = await chrome.permissions.contains({
+      permissions: ["scripting"],
+    });
+
+    if (!hasScriptingPermission) {
+      console.warn("스크립팅 권한이 없습니다. 일부 기능이 제한될 수 있습니다.");
+    }
+
+    // 호스트 권한 확인
+    const hasHostPermission = await chrome.permissions.contains({
+      origins: ["*://*/*"],
+    });
+
+    if (!hasHostPermission) {
+      console.warn(
+        "호스트 권한이 제한되어 있습니다. 일부 사이트에서 기능이 제한될 수 있습니다."
+      );
+    }
+  } catch (error) {
+    console.error("권한 확인 중 오류 발생:", error);
+  }
 }
 
 // 메시지 리스너 설정
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // sender.tab이 없는 경우도 처리할 수 있도록 수정
   if (!message || typeof message !== "object") return false;
+
+  // executeScriptInPage 요청 처리
+  if (message.type === "executeScriptInPage" && message.tabId) {
+    executeScriptWithScriptingAPI(message.tabId)
+      .then((result) => {
+        sendResponse({ success: result });
+      })
+      .catch((error) => {
+        console.error("스크립트 실행 오류:", error);
+        sendResponse({ success: false, error: error.message });
+      });
+
+    return true; // 비동기 응답을 위해 true 반환
+  }
 
   // 팝업에서 오는 메시지 처리 (sender.tab이 없음)
   if (!sender.tab) {
@@ -252,6 +312,197 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false;
 });
+
+/**
+ * chrome.scripting API를 사용하여 스크립트 실행
+ */
+async function executeScriptWithScriptingAPI(
+  targetTabId: number
+): Promise<boolean> {
+  try {
+    // 실행할 함수 정의 - 실제 페이지 컨텍스트에서 실행됩니다
+    function setupWorkerPoolMonitoring() {
+      // 페이지 내 HyperViz 워커풀 모니터링 스크립트
+      // 이미 설정된 경우 중복 설정 방지
+      if ((window as any).__hypervizMonitorInitialized) return;
+
+      (function () {
+        // 워커풀 객체 타입 정의
+        interface WorkerPoolsMap {
+          [key: string]: any;
+        }
+
+        // 모니터 객체 생성
+        const monitor = {
+          initialized: false,
+          workerPools: {} as WorkerPoolsMap,
+          logs: [] as any[],
+          monitoringInterval: null as number | null,
+
+          // 초기화 메서드
+          init() {
+            if (this.initialized) return false;
+
+            try {
+              // 워커풀 객체 검색
+              if ((window as any).workerPool) {
+                this.workerPools.MAIN = (window as any).workerPool;
+              }
+
+              // 타입별 워커풀 검색 (HyperViz 특화)
+              if (
+                (window as any).appContext &&
+                (window as any).appContext.workers
+              ) {
+                const typedPools = (window as any).appContext.workers;
+                for (const type in typedPools) {
+                  if (typedPools[type] && typedPools[type].pool) {
+                    this.workerPools[type] = typedPools[type].pool;
+                  }
+                }
+              }
+
+              // 워커풀이 존재하는지 확인
+              if (Object.keys(this.workerPools).length === 0) {
+                console.warn("HyperViz 워커풀을 찾을 수 없습니다.");
+                window.postMessage(
+                  {
+                    source: "HYPERVIZ_PAGE_MONITOR",
+                    type: "WORKER_POOL_ERROR",
+                    error: "워커풀을 찾을 수 없습니다",
+                  },
+                  "*"
+                );
+                return false;
+              }
+
+              this.initialized = true;
+              console.log("HyperViz 워커풀 모니터링이 초기화되었습니다.");
+
+              // 로그 후킹 설정
+              this.hookLogger();
+
+              // 워커풀 발견 알림
+              window.postMessage(
+                {
+                  source: "HYPERVIZ_PAGE_MONITOR",
+                  type: "WORKER_POOL_DETECTED",
+                  details: {
+                    types: Object.keys(this.workerPools),
+                    timestamp: Date.now(),
+                  },
+                },
+                "*"
+              );
+
+              return true;
+            } catch (error) {
+              console.error("워커풀 모니터링 초기화 오류:", error);
+              window.postMessage(
+                {
+                  source: "HYPERVIZ_PAGE_MONITOR",
+                  type: "WORKER_POOL_ERROR",
+                  error: (error as Error).message || "초기화 중 오류 발생",
+                },
+                "*"
+              );
+              return false;
+            }
+          },
+
+          // 로그 후킹 설정
+          hookLogger() {
+            try {
+              // 원본 콘솔 메서드 저장
+              const originalLog = console.log;
+              const originalWarn = console.warn;
+              const originalError = console.error;
+
+              // 콘솔 메서드 재정의
+              console.log = (...args: any[]) => {
+                originalLog.apply(console, args);
+                this.captureLog("info", args);
+              };
+
+              console.warn = (...args: any[]) => {
+                originalWarn.apply(console, args);
+                this.captureLog("warn", args);
+              };
+
+              console.error = (...args: any[]) => {
+                originalError.apply(console, args);
+                this.captureLog("error", args);
+              };
+            } catch (error) {
+              console.error("로그 후킹 설정 오류:", error);
+            }
+          },
+
+          // 로그 캡처 함수
+          captureLog(level: string, args: any[]) {
+            // 워커풀 관련 로그만 캡처 (필터링)
+            const logMessage = Array.from(args).join(" ");
+            if (
+              logMessage.includes("worker") ||
+              logMessage.includes("task") ||
+              logMessage.includes("queue") ||
+              logMessage.includes("pool")
+            ) {
+              this.logs.push({
+                timestamp: Date.now(),
+                level,
+                message: logMessage,
+              });
+
+              // 로그 개수 제한
+              if (this.logs.length > 1000) {
+                this.logs = this.logs.slice(-1000);
+              }
+            }
+          },
+
+          // 모니터링 시작
+          startMonitoring(interval = 1000) {
+            if (this.monitoringInterval) {
+              clearInterval(this.monitoringInterval);
+              this.monitoringInterval = null;
+            }
+
+            this.monitoringInterval = window.setInterval(() => {
+              // 상태 수집 및 전송 코드
+              console.log("워커풀 상태 모니터링 중...");
+            }, interval) as unknown as number;
+
+            console.log("HyperViz 워커풀 모니터링이 시작되었습니다.");
+
+            // 전역 플래그 설정으로 중복 실행 방지
+            (window as any).__hypervizMonitorInitialized = true;
+
+            return true;
+          },
+        };
+
+        // 초기화 시도
+        monitor.init();
+        if (monitor.initialized) {
+          monitor.startMonitoring();
+        }
+      })();
+    }
+
+    // 스크립트 실행
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: targetTabId },
+      func: setupWorkerPoolMonitoring,
+    });
+
+    // 실행 결과 확인
+    return results && results.length > 0;
+  } catch (error) {
+    console.error("스크립팅 API 실행 오류:", error);
+    return false;
+  }
+}
 
 /**
  * 콘텐츠 스크립트와의 연결 관리

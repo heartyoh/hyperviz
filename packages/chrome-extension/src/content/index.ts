@@ -1,284 +1,161 @@
 /**
  * HyperViz 크롬 확장 프로그램 - 콘텐츠 스크립트
+ * 웹페이지와 확장 프로그램 사이의 통신을 담당합니다.
  */
 
-// 워커풀 인터페이스 정의
+/**
+ * HypervizWorkerPool 인터페이스
+ * worker-pool의 기본 데이터 구조를 정의합니다.
+ */
 interface HypervizWorkerPool {
-  getStats: () => any;
-  getLogs: (limit?: number) => any[];
-  getTaskInfo: () => any;
+  stats: Record<string, any>;
+  logs: any[];
+  taskInfo: Record<string, any>;
 }
 
-// 워커풀 객체 가져오기
-function getWorkerPool(): HypervizWorkerPool | null {
+/**
+ * 메시지 수신 시 핸들러
+ * 웹페이지로부터 오는 메시지를 처리합니다.
+ */
+function handlePageMessage(event: MessageEvent) {
+  // 동일 창에서 온 메시지만 처리
+  if (event.source !== window) return;
+
+  // hyperviz 응답 메시지만 처리
+  const data = event.data;
+  if (!data || data.type !== "hyperviz-response") return;
+
+  // 메시지 타입에 따라 처리
   try {
-    return (window as any).hypervizWorkerPool as HypervizWorkerPool;
-  } catch (error) {
-    console.error("워커풀 접근 오류:", error);
-    return null;
-  }
-}
+    switch (data.action) {
+      case "workerPoolDetected":
+        // 워커풀 감지됨
+        chrome.runtime.sendMessage({
+          type: "workerPoolDetected",
+          exists: data.exists,
+          timestamp: data.timestamp,
+        });
+        break;
 
-// 연결 상태 및 폴링 인터벌
-let isConnected = false;
-let pollInterval: number | null = null;
+      case "workerPoolData":
+        // 워커풀 데이터 수신됨
+        chrome.runtime.sendMessage({
+          type: "workerPoolData",
+          data: data.payload,
+        });
+        break;
 
-// 백그라운드 스크립트와의 포트 연결
-let contentPort: chrome.runtime.Port | null = null;
+      case "logs":
+        // 로그 데이터 수신됨
+        chrome.runtime.sendMessage({
+          type: "logs",
+          logs: data.payload,
+        });
+        break;
 
-// 연결 시도 함수
-function connectToBackgroundScript() {
-  if (contentPort) {
-    try {
-      contentPort.disconnect();
-    } catch (error) {
-      console.warn("기존 포트 연결 해제 오류:", error);
+      case "taskInfo":
+        // 태스크 정보 수신됨
+        chrome.runtime.sendMessage({
+          type: "taskInfo",
+          taskInfo: data.payload,
+        });
+        break;
+
+      case "workerActionResult":
+        // 워커 액션 결과 수신됨
+        chrome.runtime.sendMessage({
+          type: "workerActionResult",
+          result: data.payload,
+        });
+        break;
+
+      default:
+        console.log("[HyperViz] 알 수 없는 메시지:", data);
+        break;
     }
-  }
-
-  try {
-    contentPort = chrome.runtime.connect({ name: "content-script" });
-
-    contentPort.onMessage.addListener(handlePortMessage);
-
-    contentPort.onDisconnect.addListener(() => {
-      console.log("백그라운드와 연결이 끊어졌습니다.");
-      contentPort = null;
-
-      // 폴링 중지
-      if (pollInterval) {
-        window.clearInterval(pollInterval);
-        pollInterval = null;
-      }
-
-      // 2초 후 재연결 시도
-      setTimeout(connectToBackgroundScript, 2000);
-    });
-
-    console.log("백그라운드 스크립트와 포트 연결됨");
-    return true;
   } catch (error) {
-    console.error("백그라운드 연결 오류:", error);
-    contentPort = null;
-    return false;
-  }
-}
-
-// 포트 메시지 처리
-function handlePortMessage(message: any) {
-  if (!message || !message.type) return;
-
-  console.log("포트 메시지 수신:", message);
-
-  switch (message.type) {
-    case "connect":
-      handleContentConnect();
-      break;
-
-    case "disconnect":
-      handleContentDisconnect();
-      break;
-
-    case "requestLogs":
-      sendLogsData(message.data?.limit || 30);
-      break;
-
-    case "restartWorker":
-      // 이 기능은 현재 구현되어 있지 않음
-      break;
-
-    default:
-      break;
-  }
-}
-
-// 연결 처리
-function handleContentConnect() {
-  const workerPool = getWorkerPool();
-
-  if (workerPool) {
-    isConnected = true;
-
-    // 연결 성공 메시지 전송
-    sendToBackground("connected", null);
-
-    // 초기 데이터 전송
-    sendWorkerPoolData();
-
-    // 연결에 성공하면 주기적으로 데이터 전송 시작
-    if (!pollInterval) {
-      pollInterval = window.setInterval(sendWorkerPoolData, 1000);
-    }
-  } else {
-    sendToBackground("connectionFailed", {
-      message: "페이지에서 워커풀을 찾을 수 없습니다.",
+    console.error("[HyperViz] 메시지 처리 중 오류:", error);
+    chrome.runtime.sendMessage({
+      type: "error",
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }
 
-// 연결 해제 처리
-function handleContentDisconnect() {
-  if (pollInterval) {
-    window.clearInterval(pollInterval);
-    pollInterval = null;
-  }
-
-  isConnected = false;
-  sendToBackground("disconnected", null);
+/**
+ * 확장 프로그램 <-> 페이지 간 메시지 전달
+ * 확장 프로그램의 요청을 페이지로 전달합니다.
+ */
+function sendMessageToPage(type: string, data: any = {}) {
+  window.postMessage(
+    {
+      type: "hyperviz-extension-request",
+      action: type,
+      ...data,
+    },
+    "*"
+  );
 }
 
-// 로그 데이터 전송
-function sendLogsData(limit: number = 30) {
-  const workerPool = getWorkerPool();
+/**
+ * 백그라운드 스크립트로부터 메시지 수신
+ */
+chrome.runtime.onMessage.addListener((message: any) => {
+  if (message && message.target === "content") {
+    switch (message.action) {
+      case "checkWorkerPool":
+        // 페이지에 워커풀이 있는지 확인 요청
+        sendMessageToPage("connect");
+        break;
 
-  if (workerPool) {
-    const logs = workerPool.getLogs(limit);
-    sendToBackground("logs", { logs });
-  } else {
-    sendToBackground("logs", { logs: [], error: "워커풀을 찾을 수 없습니다." });
-  }
-}
+      case "getWorkerPoolData":
+        // 워커풀 데이터 요청
+        sendMessageToPage("getWorkerPoolData");
+        break;
 
-// 워커풀 데이터를 백그라운드 스크립트에 전송
-function sendWorkerPoolData() {
-  const workerPool = getWorkerPool();
+      case "getStats":
+        // 통계 데이터 요청
+        sendMessageToPage("getStats");
+        break;
 
-  if (!workerPool || !isConnected) {
-    if (pollInterval) {
-      window.clearInterval(pollInterval);
-      pollInterval = null;
-    }
-    return;
-  }
+      case "getLogs":
+        // 로그 데이터 요청
+        sendMessageToPage("getLogs", { count: message.count });
+        break;
 
-  try {
-    const metrics = workerPool.getStats();
-    const logs = workerPool.getLogs(10);
-    const workers = workerPool.getTaskInfo();
+      case "getTaskInfo":
+        // 태스크 정보 요청
+        sendMessageToPage("getTaskInfo");
+        break;
 
-    sendToBackground("workerPoolData", {
-      metrics,
-      logs,
-      workers,
-    });
-  } catch (error) {
-    console.error("워커풀 데이터 전송 오류:", error);
+      case "restartWorker":
+        // 워커 재시작 요청
+        sendMessageToPage("restartWorker", {
+          workerId: message.workerId,
+          workerType: message.workerType,
+        });
+        break;
 
-    // 오류 발생 시 폴링 중지
-    if (pollInterval) {
-      window.clearInterval(pollInterval);
-      pollInterval = null;
-    }
-
-    // 연결 해제 상태로 변경
-    isConnected = false;
-    sendToBackground("disconnected", { error: "데이터 전송 중 오류 발생" });
-  }
-}
-
-// 백그라운드에 메시지 전송 (포트와 일반 메시지 둘 다 사용)
-function sendToBackground(type: string, data: any) {
-  // 포트가 있으면 포트로 전송
-  if (contentPort) {
-    try {
-      contentPort.postMessage({ type, data });
-    } catch (error) {
-      console.error(`포트 메시지 전송 오류 (${type}):`, error);
-      // 포트 연결이 끊어진 경우 일반 메시지로 시도
-      try {
-        chrome.runtime.sendMessage({ type, data });
-      } catch (backupError) {
-        console.error(`백업 메시지 전송도 실패 (${type}):`, backupError);
-      }
-    }
-  } else {
-    // 포트가 없으면 일반 메시지로 전송
-    try {
-      chrome.runtime.sendMessage({ type, data });
-    } catch (error) {
-      console.error(`일반 메시지 전송 오류 (${type}):`, error);
+      case "disconnect":
+        // 연결 해제 요청
+        sendMessageToPage("disconnect");
+        break;
     }
   }
-}
-
-// 대비책으로 기존의 메시지 리스너도 유지
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message || typeof message !== "object") return false;
-
-  // 연결 요청
-  if (message.type === "connect") {
-    handleContentConnect();
-    sendResponse({ success: true, message: "연결 처리 완료" });
-    return true;
-  }
-
-  // 연결 해제 요청
-  if (message.type === "disconnect") {
-    handleContentDisconnect();
-    sendResponse({ success: true, message: "연결 해제 처리 완료" });
-    return true;
-  }
-
-  // 워커풀 데이터 요청
-  if (message.type === "getWorkerPoolData") {
-    const workerPool = getWorkerPool();
-
-    if (workerPool) {
-      sendResponse({
-        success: true,
-        data: {
-          stats: workerPool.getStats(),
-          logs: workerPool.getLogs(30),
-          taskInfo: workerPool.getTaskInfo(),
-        },
-      });
-    } else {
-      sendResponse({
-        success: false,
-        message: "워커풀을 찾을 수 없습니다.",
-      });
-    }
-
-    return true;
-  }
-
-  return false;
 });
 
-// 페이지 로드 시 워커풀 탐지 시도
-window.addEventListener("load", () => {
-  // 백그라운드 스크립트와 연결
-  connectToBackgroundScript();
+/**
+ * 컨텐츠 스크립트 초기화
+ */
+function initContentScript() {
+  console.log("[HyperViz] 컨텐츠 스크립트가 초기화되었습니다.");
 
-  setTimeout(() => {
-    const workerPool = getWorkerPool();
+  // 페이지 메시지 리스너 등록
+  window.addEventListener("message", handlePageMessage);
 
-    if (workerPool) {
-      // 일반 메시지로도 전송 (포트가 아직 설정되지 않았을 수 있음)
-      chrome.runtime.sendMessage({
-        type: "workerPoolDetected",
-        pageUrl: window.location.href,
-      });
+  // 페이지 로드 시 워커풀 감지 시작
+  sendMessageToPage("connect");
+}
 
-      // 포트를 통해 전송
-      sendToBackground("workerPoolDetected", { pageUrl: window.location.href });
-    }
-  }, 1000);
-});
-
-// 페이지 언로드 시 정리
-window.addEventListener("beforeunload", () => {
-  if (pollInterval) {
-    window.clearInterval(pollInterval);
-    pollInterval = null;
-  }
-
-  if (contentPort) {
-    try {
-      contentPort.disconnect();
-    } catch (error) {
-      // 언로드 중 오류는 무시
-    }
-    contentPort = null;
-  }
-});
+// 컨텐츠 스크립트 초기화
+initContentScript();

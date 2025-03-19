@@ -177,6 +177,8 @@
           initialPools: {
             [WorkerType.CALC]: { minWorkers: 2, maxWorkers: 8 },
           },
+          // 확장 프로그램 통신 활성화
+          enableExtensionCommunication: true,
         });
 
         // 태스크 유형을 워커 유형에 매핑
@@ -207,75 +209,61 @@
           await manager.initialize();
           addLog("워커풀 매니저가 성공적으로 초기화되었습니다.");
 
-          // 전역 객체에 매니저 노출 (크롬 확장 프로그램 접근용)
-          window.hypervizWorkerPool = {
-            manager,
-            getStats: () => {
-              const poolStats = {};
-              manager.getPoolStats().forEach((stats, type) => {
-                poolStats[type] = stats;
-              });
-              return poolStats;
-            },
-            getLogs: (count) => manager.getLogs(count),
-            getTaskInfo: () => ({
-              total: taskCounter.total,
-              completed: taskCounter.completed,
-              failed: taskCounter.failed,
-            }),
-          };
-
-          console.log(
-            "HyperViz 워커풀이 전역 객체에 노출되었습니다:",
-            window.hypervizWorkerPool
-          );
-          console.log(
-            "HyperViz 워커풀 통계:",
-            window.hypervizWorkerPool.getStats()
-          );
-
           // 초기 상태 업데이트
           updateStats();
 
           // 통계 정기 업데이트
           setInterval(updateStats, 1000);
+
+          addLog("확장 프로그램과의 통신이 활성화되었습니다.");
         } catch (error) {
           addLog(`초기화 오류: ${error.message}`);
-          console.error(error);
+          console.error("워커풀 초기화 오류:", error);
         }
       }
 
       // 하나의 태스크 생성
       function createTask() {
-        if (!manager) return;
+        if (!manager) {
+          addLog("오류: 워커풀 매니저가 초기화되지 않았습니다.");
+          return;
+        }
 
         const priority =
           Math.random() > 0.7 ? TaskPriority.HIGH : TaskPriority.NORMAL;
         const dimensions = Math.floor(Math.random() * 100) + 100;
 
-        const taskId = manager.submitTask(
-          "matrix",
-          {
-            dimensions: [dimensions, dimensions],
-            operation: "multiply",
-          },
-          { priority }
-        );
+        try {
+          const taskId = manager.submitTask(
+            "matrix",
+            {
+              dimensions: [dimensions, dimensions],
+              operation: "multiply",
+            },
+            { priority }
+          );
 
-        addLog(
-          `새 태스크 생성됨 (${
-            priority === TaskPriority.HIGH ? "높음" : "보통"
-          } 우선순위): ${taskId}`
-        );
-        taskCounter.total++;
-        updateStats();
+          addLog(
+            `새 태스크 생성됨 (${
+              priority === TaskPriority.HIGH ? "높음" : "보통"
+            } 우선순위): ${taskId}`
+          );
+          taskCounter.total++;
+          updateStats();
 
-        return taskId;
+          return taskId;
+        } catch (error) {
+          addLog(`태스크 생성 오류: ${error.message}`);
+          console.error("태스크 생성 오류:", error);
+        }
       }
 
       // 대량의 태스크 생성
       function createLotsOfTasks(count = 50) {
-        if (!manager) return;
+        if (!manager) {
+          addLog("오류: 워커풀 매니저가 초기화되지 않았습니다.");
+          return;
+        }
 
         addLog(`${count}개의 태스크 생성 중...`);
 
@@ -288,7 +276,10 @@
 
       // 태스크 초기화
       function clearTasks() {
-        if (!manager) return;
+        if (!manager) {
+          addLog("오류: 워커풀 매니저가 초기화되지 않았습니다.");
+          return;
+        }
 
         addLog("태스크 초기화 중...");
 
@@ -299,12 +290,16 @@
         };
 
         updateStats();
+        addLog("태스크 카운터가 초기화되었습니다.");
       }
 
       // 이벤트 리스너 등록
       document.addEventListener("DOMContentLoaded", () => {
         // 초기화
-        initializeWorkerPool();
+        initializeWorkerPool().catch((error) => {
+          console.error("워커풀 초기화 실패:", error);
+          addLog(`워커풀 초기화 실패: ${error.message}`);
+        });
 
         // 버튼 이벤트 처리
         document.getElementById("createTasks").addEventListener("click", () => {

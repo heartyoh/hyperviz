@@ -3,7 +3,7 @@
   "name": "HyperViz 확장 도구",
   "version": "0.1.0",
   "description": "HyperViz 데이터 시각화, 워커풀 관리 및 성능 모니터링을 위한 통합 도구",
-  "permissions": ["storage", "scripting"],
+  "permissions": ["storage", "scripting", "tabs"],
   "host_permissions": ["*://*/*"],
   "action": {
     "default_popup": "popup.html",
@@ -35,5 +35,8 @@
       "matches": ["<all_urls>"]
     }
   ],
-  "devtools_page": "devtools/devtools.html"
+  "devtools_page": "devtools/devtools.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }
