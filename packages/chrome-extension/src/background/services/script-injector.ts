@@ -36,7 +36,16 @@ class ScriptInjector {
         target: { tabId: targetTabId },
         func: function setupWorkerPoolMonitoring() {
           // 워커풀 모니터 정의
-          const workerPoolMonitor = {
+          const workerPoolMonitor: {
+            initialized: boolean;
+            workerPools: Record<string, any>;
+            logs: Array<{ level: string; message: string; timestamp: number }>;
+            monitoringInterval: ReturnType<typeof setInterval> | null;
+            init(): boolean;
+            hookLogger(): void;
+            captureLog(level: string, args: any[]): void;
+            startMonitoring(interval?: number): void;
+          } = {
             initialized: false,
             workerPools: {},
             logs: [],
@@ -119,9 +128,9 @@ class ScriptInjector {
         },
       });
 
-      return (
-        results && results[0] && results[0].result && results[0].result.success
-      );
+      const result =
+        results && results[0] && results[0].result && results[0].result.success;
+      return result === true;
     } catch (error) {
       console.error(
         `[HyperViz] 스크립팅 API 실행 실패 (탭 ID: ${targetTabId}):`,
@@ -234,9 +243,9 @@ class ScriptInjector {
         },
       });
 
-      return (
-        results && results[0] && results[0].result && results[0].result.success
-      );
+      const result =
+        results && results[0] && results[0].result && results[0].result.success;
+      return result === true;
     } catch (error) {
       console.error(
         `[HyperViz] 가상 워커풀 생성 실패 (탭 ID: ${tabId}):`,

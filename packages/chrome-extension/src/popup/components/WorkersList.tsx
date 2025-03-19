@@ -1,5 +1,5 @@
 import { h } from "preact";
-import type { WorkerInfo } from "../types.js";
+import type { WorkerInfo } from "../types";
 
 interface WorkersListProps {
   workers: WorkerInfo[];

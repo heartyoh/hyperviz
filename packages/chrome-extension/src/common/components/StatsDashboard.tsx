@@ -25,14 +25,16 @@ export function StatsDashboard({
 
   // 상태 구독
   useEffect(() => {
-    stateManager.subscribe("statsDashboard", (state) => {
+    const updateState = (state: any) => {
       if (state.workers) {
-        setWorkers(state.workers);
+        setWorkers((prevWorkers) => ({ ...prevWorkers, ...state.workers }));
       }
       if (state.stats) {
-        setStats(state.stats);
+        setStats((prevStats) => ({ ...prevStats, ...state.stats }));
       }
-    });
+    };
+
+    stateManager.subscribe("statsDashboard", updateState);
 
     return () => {
       stateManager.unsubscribe("statsDashboard");

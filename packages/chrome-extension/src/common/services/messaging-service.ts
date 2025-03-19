@@ -234,6 +234,45 @@ export class MessagingService extends EventEmitter {
     data: any = {}
   ): Promise<any> {
     return new Promise((resolve, reject) => {
+      // 확장 프로그램 컨텍스트 유효성 확인
+      try {
+        if (!chrome.runtime || chrome.runtime.id === undefined) {
+          reject(new Error("Extension context invalidated"));
+          return;
+        }
+      } catch (error) {
+        console.error("[HyperViz] 확장 프로그램 컨텍스트 확인 오류:", error);
+        reject(new Error("Extension context invalidated"));
+        return;
+      }
+
+      // 탭 ID 유효성 검증
+      if (typeof tabId !== "number" || tabId <= 0) {
+        reject(new Error("유효하지 않은 탭 ID입니다."));
+        return;
+      }
+
+      // 데이터 직렬화 가능 여부 확인
+      try {
+        // 직렬화 테스트 (JSON 변환 후 다시 객체로)
+        const testSerialize = JSON.parse(JSON.stringify({ type, data }));
+        if (!testSerialize) {
+          throw new Error("직렬화할 수 없는 데이터입니다.");
+        }
+      } catch (error) {
+        console.error("[HyperViz] 메시지 직렬화 오류:", error);
+        reject(new Error("직렬화할 수 없는 데이터입니다."));
+        return;
+      }
+
+      // 시간 초과 처리를 위한 타이머
+      const messageTimeout = setTimeout(() => {
+        console.warn(
+          `[HyperViz] 메시지 응답 시간 초과 (tabId: ${tabId}, type: ${type})`
+        );
+        reject(new Error("메시지 응답 시간 초과"));
+      }, 5000);
+
       try {
         chrome.tabs.sendMessage(
           tabId,
@@ -244,9 +283,44 @@ export class MessagingService extends EventEmitter {
             token: this.securityToken,
           },
           (response) => {
+            clearTimeout(messageTimeout);
+
             // 런타임 오류 확인
             if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
+              const errorMsg = chrome.runtime.lastError.message || "";
+              console.error("[HyperViz] 메시지 전송 오류:", errorMsg);
+
+              // 특정 오류 메시지에 대한 사용자 친화적인 처리
+              if (errorMsg.includes("message port closed")) {
+                reject(
+                  new Error(
+                    "통신 채널이 닫혔습니다. 페이지를 새로고침하거나 확장 프로그램을 다시 로드하세요."
+                  )
+                );
+              } else if (errorMsg.includes("Extension context invalidated")) {
+                reject(
+                  new Error(
+                    "확장 프로그램 컨텍스트가 무효화되었습니다. 페이지를 새로고침하세요."
+                  )
+                );
+              } else if (errorMsg.includes("Receiving end does not exist")) {
+                reject(
+                  new Error(
+                    "콘텐츠 스크립트가 로드되지 않았습니다. 페이지를 새로고침하세요."
+                  )
+                );
+              } else {
+                reject(new Error(errorMsg));
+              }
+              return;
+            }
+
+            // 응답이 없는 경우 처리
+            if (response === undefined) {
+              console.warn(
+                "[HyperViz] 메시지 응답이 없습니다. 탭이 응답하지 않을 수 있습니다."
+              );
+              resolve(null); // 응답이 없는 경우에도 처리 가능하도록 null 반환
               return;
             }
 
@@ -254,6 +328,29 @@ export class MessagingService extends EventEmitter {
           }
         );
       } catch (error) {
+        clearTimeout(messageTimeout);
+
+        console.error("[HyperViz] 메시지 전송 오류:", error);
+
+        // 확장 프로그램 컨텍스트 무효화 확인
+        try {
+          if (!chrome.runtime || chrome.runtime.id === undefined) {
+            reject(
+              new Error(
+                "확장 프로그램 컨텍스트가 무효화되었습니다. 페이지를 새로고침하세요."
+              )
+            );
+            return;
+          }
+        } catch (contextError) {
+          reject(
+            new Error(
+              "확장 프로그램 컨텍스트가 무효화되었습니다. 페이지를 새로고침하세요."
+            )
+          );
+          return;
+        }
+
         reject(error);
       }
     });
@@ -271,6 +368,16 @@ export class MessagingService extends EventEmitter {
     ...args: any[]
   ): Promise<any> {
     try {
+      // 확장 프로그램 컨텍스트 유효성 확인
+      if (!chrome.runtime || chrome.runtime.id === undefined) {
+        throw new Error("Extension context invalidated");
+      }
+
+      // 탭 ID 유효성 검증
+      if (typeof tabId !== "number" || tabId <= 0) {
+        throw new Error("유효하지 않은 탭 ID입니다.");
+      }
+
       const results = await chrome.scripting.executeScript({
         target: { tabId },
         func: func as any,
@@ -283,7 +390,21 @@ export class MessagingService extends EventEmitter {
 
       throw new Error("스크립트 실행 결과가 없습니다");
     } catch (error) {
-      console.error("스크립트 실행 오류:", error);
+      console.error("[HyperViz] 스크립트 실행 오류:", error);
+
+      // 특정 오류 메시지에 대한 더 자세한 로그
+      if (error instanceof Error) {
+        if (error.message.includes("Cannot access contents of url")) {
+          console.error(
+            "[HyperViz] 탭에 접근 권한이 없습니다. 확장 프로그램 권한을 확인하세요."
+          );
+        } else if (error.message.includes("Extension context invalidated")) {
+          console.error(
+            "[HyperViz] 확장 프로그램 컨텍스트가 무효화되었습니다. 페이지를 새로고침하세요."
+          );
+        }
+      }
+
       throw error;
     }
   }
@@ -334,29 +455,54 @@ export class MessagingService extends EventEmitter {
     sender: chrome.runtime.MessageSender,
     sendResponse: (response?: any) => void
   ): boolean {
+    // 기본 타입 검증
+    if (!message || typeof message !== "object") {
+      console.warn("[HyperViz] 유효하지 않은 메시지 형식:", message);
+      sendResponse({ error: "유효하지 않은 메시지 형식" });
+      return false;
+    }
+
+    // 메시지 직렬화 검증
+    try {
+      // 직렬화 테스트 (실제로 직렬화 수행)
+      JSON.stringify(message);
+    } catch (error) {
+      console.error("[HyperViz] 직렬화할 수 없는 메시지 수신:", error);
+      sendResponse({ error: "직렬화할 수 없는 메시지" });
+      return false;
+    }
+
     // 기본 보안 검증
     if (!this.validateMessage(message)) {
-      console.warn("유효하지 않은 런타임 메시지:", message);
+      console.warn("[HyperViz] 유효하지 않은 런타임 메시지:", message);
       sendResponse({ error: "유효하지 않은 메시지" });
       return false;
     }
 
-    // 이벤트 발행
-    this.emit(message.type, {
-      ...message.data,
-      sender,
-    });
+    try {
+      // 이벤트 발행
+      this.emit(message.type, {
+        ...message.data,
+        sender,
+      });
 
-    // 상태 업데이트 메시지 처리
-    this.updateStateFromMessage(message);
+      // 상태 업데이트 메시지 처리
+      this.updateStateFromMessage(message);
 
-    // 응답이 필요한 메시지 처리
-    if (message.data?.requestId) {
-      // 비동기 처리가 필요한 경우는 true 반환하여 sendResponse 콜백 유지
-      return true;
+      // 응답이 필요한 메시지 처리
+      if (message.data?.requestId) {
+        // 비동기 처리가 필요한 경우는 true 반환하여 sendResponse 콜백 유지
+        return true;
+      }
+
+      // 처리 성공 응답
+      sendResponse({ success: true });
+      return false;
+    } catch (error) {
+      console.error("[HyperViz] 메시지 처리 오류:", error);
+      sendResponse({ error: "메시지 처리 중 오류 발생" });
+      return false;
     }
-
-    return false;
   }
 
   /**
@@ -463,10 +609,16 @@ export class MessagingService extends EventEmitter {
    * @param reason 거부 이유
    */
   private rejectAllPendingRequests(reason: string): void {
-    for (const [requestId, request] of this.pendingRequests.entries()) {
-      clearTimeout(request.timeout);
-      request.reject(new Error(reason));
-      this.pendingRequests.delete(requestId);
+    if (this.pendingRequests.size > 0) {
+      console.warn(
+        `[HyperViz] ${this.pendingRequests.size}개의 대기 중인 요청이 취소됨: ${reason}`
+      );
+
+      for (const [requestId, request] of this.pendingRequests.entries()) {
+        clearTimeout(request.timeout);
+        request.reject(new Error(reason));
+        this.pendingRequests.delete(requestId);
+      }
     }
   }
 }

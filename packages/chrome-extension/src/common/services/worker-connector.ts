@@ -16,6 +16,49 @@ export interface WorkerConnectorConfig {
   monitoringEnabled?: boolean;
 }
 
+// 응답 인터페이스 정의
+interface ConnectResponse {
+  success: boolean;
+  exists: boolean;
+  version: string | null;
+  info: {
+    version: string;
+    poolCount: number;
+    workerCount: number;
+  } | null;
+}
+
+interface DataResponse {
+  success: boolean;
+  data: {
+    workers: Record<string, any>;
+    stats: Record<string, any>;
+    logs: any[];
+  } | null;
+}
+
+interface WorkerResponse {
+  success: boolean;
+  error?: string;
+  terminatedCount?: number;
+}
+
+// 메시지 타입 정의
+interface ExtensionMessage {
+  source: "hyperviz-extension";
+  securityToken: string;
+  type: string;
+  data?: any;
+}
+
+interface PageMessage {
+  source: "hyperviz-page";
+  securityToken: string;
+  type: string;
+  data?: any;
+  timestamp: number;
+}
+
 /**
  * 워커풀 커넥터 클래스
  */
@@ -90,23 +133,53 @@ export class WorkerConnector extends EventEmitter {
   public async connectToTab(tabId: number): Promise<boolean> {
     if (this.connecting) return false;
 
+    // 탭 ID 유효성 검증 추가
+    if (typeof tabId !== "number" || tabId <= 0) {
+      console.error("[HyperViz] 유효하지 않은 탭 ID로 연결 시도:", tabId);
+      return false;
+    }
+
     try {
       this.connecting = true;
       this.currentTabId = tabId;
       stateManager.setState({ connecting: true, currentTabId: tabId });
+
+      // 확장 프로그램 컨텍스트 유효성 확인
+      try {
+        // 간단한 API 호출로 컨텍스트 유효성 확인
+        await new Promise<void>((resolve) => {
+          chrome.runtime.getPlatformInfo(() => {
+            if (chrome.runtime.lastError) {
+              throw new Error("Extension context invalidated");
+            }
+            resolve();
+          });
+        });
+      } catch (err) {
+        console.error(
+          "[HyperViz] 확장 프로그램 컨텍스트가 무효화되었습니다:",
+          err
+        );
+        throw new Error(
+          "확장 프로그램 컨텍스트가 무효화되었습니다. 페이지를 새로고침하세요."
+        );
+      }
 
       // 해당 탭으로 상태 전환
       await stateManager.switchToTab(tabId);
 
       // 먼저 워커풀 커넥터 스크립트가 주입되었는지 확인
       if (!this.injectionStatus.get(tabId)) {
+        console.log(`[HyperViz] 탭 ${tabId}에 커넥터 스크립트 주입 시도...`);
         const injected = await this.injectConnector(tabId);
         if (!injected) {
           throw new Error("워커풀 커넥터 스크립트 주입 실패");
         }
+        console.log(`[HyperViz] 탭 ${tabId}에 커넥터 스크립트 주입 성공`);
       }
 
       // 콘텐츠 스크립트를 통해 워커풀 연결 시도
+      console.log(`[HyperViz] 탭 ${tabId}에 연결 메시지 전송 중...`);
       const response = await messagingService.sendToContentScript(
         tabId,
         MessageType.CONNECT,
@@ -127,13 +200,40 @@ export class WorkerConnector extends EventEmitter {
           lastConnection: Date.now(),
         });
 
+        console.log(
+          `[HyperViz] 탭 ${tabId}의 워커풀 연결 성공:`,
+          response.info
+        );
         this.emit("connected", { tabId, workerInfo: response.info });
         return true;
       } else {
-        throw new Error(response?.error || "워커풀 연결 실패");
+        // 구체적인 오류 메시지 제공
+        const errorMsg =
+          response?.error || "알 수 없는 오류로 워커풀 연결 실패";
+        console.error(`[HyperViz] 워커풀 연결 응답 오류:`, errorMsg);
+        throw new Error(errorMsg);
       }
-    } catch (error) {
-      console.error("워커풀 연결 오류:", error);
+    } catch (error: unknown) {
+      // TypeScript 오류 해결을 위해 error 타입 처리
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      // 오류 유형에 따른 구체적인 로그
+      if (errorMessage.includes("Cannot access contents of url")) {
+        console.error(`[HyperViz] 탭 ${tabId}에 접근 권한이 없습니다:`, error);
+      } else if (errorMessage.includes("message port closed")) {
+        console.error(
+          `[HyperViz] 탭 ${tabId}와의 통신 채널이 닫혔습니다:`,
+          error
+        );
+      } else if (errorMessage.includes("Extension context invalidated")) {
+        console.error(
+          `[HyperViz] 확장 프로그램 컨텍스트가 무효화되었습니다. 페이지를 새로고침하세요:`,
+          error
+        );
+      } else {
+        console.error(`[HyperViz] 탭 ${tabId}에 워커풀 연결 오류:`, error);
+      }
 
       // 상태 업데이트
       stateManager.setState({
@@ -348,16 +448,79 @@ export class WorkerConnector extends EventEmitter {
    */
   public async getCurrentTabId(): Promise<number | null> {
     try {
+      // DevTools 환경인지 확인
+      if (
+        typeof chrome.devtools !== "undefined" &&
+        chrome.devtools.inspectedWindow
+      ) {
+        // DevTools 컨텍스트에서는 inspectedWindow.tabId 사용
+        const inspectedTabId = chrome.devtools.inspectedWindow.tabId;
+
+        if (typeof inspectedTabId === "number" && inspectedTabId > 0) {
+          console.log(
+            `[HyperViz] DevTools에서 검사 중인 탭 ID: ${inspectedTabId}`
+          );
+          return inspectedTabId;
+        } else {
+          console.error(
+            "[HyperViz] DevTools에서 유효하지 않은 탭 ID:",
+            inspectedTabId
+          );
+          return null;
+        }
+      }
+
+      // 확장 프로그램 컨텍스트 유효성 확인
+      try {
+        await new Promise<void>((resolve, reject) => {
+          chrome.runtime.getPlatformInfo((info) => {
+            if (chrome.runtime.lastError) {
+              reject(new Error("Extension context invalidated"));
+              return;
+            }
+            resolve();
+          });
+        });
+      } catch (err) {
+        console.error(
+          "[HyperViz] 확장 프로그램 컨텍스트가 무효화되었습니다:",
+          err
+        );
+        throw new Error("확장 프로그램 컨텍스트가 무효화되었습니다.");
+      }
+
+      // 일반 확장 컨텍스트에서는 기존 방식 사용
       const tabs = await chrome.tabs.query({
         active: true,
         currentWindow: true,
       });
-      if (tabs.length > 0 && tabs[0].id) {
-        return tabs[0].id;
+
+      // 탭 검증 로직 강화
+      if (!tabs || tabs.length === 0) {
+        console.error("[HyperViz] 활성 탭을 찾을 수 없음");
+        return null;
       }
-      return null;
+
+      if (typeof tabs[0].id !== "number" || tabs[0].id <= 0) {
+        console.error("[HyperViz] 유효하지 않은 탭 ID:", tabs[0].id);
+        return null;
+      }
+
+      console.log(`[HyperViz] 활성 탭 ID: ${tabs[0].id}`);
+      return tabs[0].id;
     } catch (error) {
-      console.error("현재 탭 ID 가져오기 오류:", error);
+      console.error("[HyperViz] 현재 탭 ID 가져오기 오류:", error);
+
+      // 특별한 오류 메시지 처리
+      if (
+        error instanceof Error &&
+        error.message.includes("Extension context invalidated")
+      ) {
+        console.error(
+          "[HyperViz] 확장 프로그램 컨텍스트가 무효화되었습니다. 페이지를 새로고침하세요."
+        );
+      }
+
       return null;
     }
   }
@@ -385,8 +548,7 @@ export class WorkerConnector extends EventEmitter {
             securityToken,
             initialized: true,
             timestamp: Date.now(),
-
-            // 워커풀 인스턴스 찾기
+            workerPool: undefined,
             findWorkerPool: () => {
               // 전역 객체에서 유력한 후보 찾기
               if (window.hypervizWorkerPool) {
@@ -407,71 +569,72 @@ export class WorkerConnector extends EventEmitter {
 
               return null;
             },
-
-            // 메시지 전송
-            sendMessageToExtension: (type, data) => {
-              window.postMessage(
-                {
-                  source: "hyperviz-page",
-                  securityToken,
-                  type,
-                  data,
-                  timestamp: Date.now(),
-                },
-                "*"
-              );
+            sendMessageToExtension: (type: string, data: any) => {
+              const message: PageMessage = {
+                source: "hyperviz-page",
+                securityToken,
+                type,
+                data,
+                timestamp: Date.now(),
+              };
+              window.postMessage(message, "*");
             },
           };
 
           // 메시지 리스너 설정
-          window.addEventListener("message", (event) => {
-            // 확장 프로그램에서 온 메시지만 처리
-            if (
-              event.source === window &&
-              event.data &&
-              event.data.source === "hyperviz-extension" &&
-              event.data.securityToken === securityToken
-            ) {
-              const connector = window.__hypervizExtensionConnector;
-              if (!connector) return;
+          window.addEventListener(
+            "message",
+            (event: MessageEvent<ExtensionMessage>) => {
+              // 확장 프로그램에서 온 메시지만 처리
+              if (
+                event.source === window &&
+                event.data &&
+                event.data.source === "hyperviz-extension" &&
+                event.data.securityToken === securityToken
+              ) {
+                const connector = window.__hypervizExtensionConnector;
+                if (!connector) return;
 
-              // 메시지 유형에 따른 처리
-              const { type, data } = event.data;
+                // 메시지 유형에 따른 처리
+                const { type, data } = event.data;
 
-              switch (type) {
-                case "connect":
-                  handleConnect();
-                  break;
+                switch (type) {
+                  case "connect":
+                    handleConnect();
+                    break;
 
-                case "disconnect":
-                  handleDisconnect();
-                  break;
+                  case "disconnect":
+                    handleDisconnect();
+                    break;
 
-                case "requestData":
-                  handleDataRequest();
-                  break;
+                  case "requestData":
+                    handleDataRequest();
+                    break;
 
-                case "updateSettings":
-                  handleUpdateSettings(data.settings);
-                  break;
+                  case "updateSettings":
+                    handleUpdateSettings(data?.settings);
+                    break;
 
-                case "restartWorker":
-                  handleRestartWorker(data.workerId);
-                  break;
+                  case "restartWorker":
+                    handleRestartWorker(data?.workerId);
+                    break;
 
-                case "terminateWorker":
-                  handleTerminateWorker(data.workerId, data.all);
-                  break;
+                  case "terminateWorker":
+                    handleTerminateWorker(data?.workerId, data?.all);
+                    break;
+                }
               }
             }
-          });
+          );
 
           // 워커풀 연결 처리
           function handleConnect() {
             const connector = window.__hypervizExtensionConnector;
+            if (!connector) return;
+
             const pool = connector.findWorkerPool();
 
-            let response = {
+            const response: ConnectResponse = {
               success: false,
               exists: false,
               version: null,
@@ -497,6 +660,8 @@ export class WorkerConnector extends EventEmitter {
           // 연결 해제 처리
           function handleDisconnect() {
             const connector = window.__hypervizExtensionConnector;
+            if (!connector) return;
+
             connector.workerPool = null;
             connector.sendMessageToExtension("disconnectResponse", {
               success: true,
@@ -506,9 +671,11 @@ export class WorkerConnector extends EventEmitter {
           // 데이터 요청 처리
           function handleDataRequest() {
             const connector = window.__hypervizExtensionConnector;
+            if (!connector) return;
+
             const pool = connector.workerPool || connector.findWorkerPool();
 
-            let response = {
+            const response: DataResponse = {
               success: false,
               data: null,
             };
@@ -555,9 +722,11 @@ export class WorkerConnector extends EventEmitter {
           // 설정 업데이트 처리
           function handleUpdateSettings(settings) {
             const connector = window.__hypervizExtensionConnector;
+            if (!connector) return;
+
             const pool = connector.workerPool || connector.findWorkerPool();
 
-            let response = {
+            const response: WorkerResponse = {
               success: false,
             };
 
@@ -578,7 +747,10 @@ export class WorkerConnector extends EventEmitter {
                   response.success = true;
                 }
               } catch (error) {
-                response.error = error.message;
+                response.error =
+                  error instanceof Error
+                    ? error.message
+                    : "알 수 없는 오류가 발생했습니다.";
               }
             }
 
@@ -588,9 +760,11 @@ export class WorkerConnector extends EventEmitter {
           // 워커 재시작 처리
           function handleRestartWorker(workerId) {
             const connector = window.__hypervizExtensionConnector;
+            if (!connector) return;
+
             const pool = connector.workerPool || connector.findWorkerPool();
 
-            let response = {
+            const response: WorkerResponse = {
               success: false,
             };
 
@@ -609,7 +783,10 @@ export class WorkerConnector extends EventEmitter {
                   response.success = true;
                 }
               } catch (error) {
-                response.error = error.message;
+                response.error =
+                  error instanceof Error
+                    ? error.message
+                    : "알 수 없는 오류가 발생했습니다.";
               }
             }
 
@@ -619,9 +796,11 @@ export class WorkerConnector extends EventEmitter {
           // 워커 종료 처리
           function handleTerminateWorker(workerId, all) {
             const connector = window.__hypervizExtensionConnector;
+            if (!connector) return;
+
             const pool = connector.workerPool || connector.findWorkerPool();
 
-            let response = {
+            const response: WorkerResponse = {
               success: false,
             };
 
@@ -666,7 +845,10 @@ export class WorkerConnector extends EventEmitter {
                   }
                 }
               } catch (error) {
-                response.error = error.message;
+                response.error =
+                  error instanceof Error
+                    ? error.message
+                    : "알 수 없는 오류가 발생했습니다.";
               }
             }
 
@@ -784,6 +966,71 @@ export class WorkerConnector extends EventEmitter {
       errorMessage.toLowerCase().includes(msg.toLowerCase())
     );
   }
+
+  /**
+   * 현재 활성화된 탭 감지
+   */
+  public async detectActiveTab(): Promise<number | null> {
+    try {
+      // DevTools 환경인지 확인
+      if (
+        typeof chrome.devtools !== "undefined" &&
+        chrome.devtools.inspectedWindow
+      ) {
+        // DevTools 컨텍스트에서는 inspectedWindow.tabId 사용
+        const inspectedTabId = chrome.devtools.inspectedWindow.tabId;
+
+        if (typeof inspectedTabId === "number" && inspectedTabId > 0) {
+          console.log(
+            `[HyperViz] DevTools에서 검사 중인 탭 ID: ${inspectedTabId}`
+          );
+          return inspectedTabId;
+        } else {
+          console.error(
+            "[HyperViz] DevTools에서 유효하지 않은 탭 ID:",
+            inspectedTabId
+          );
+          return null;
+        }
+      }
+
+      // 일반 확장 컨텍스트에서는 기존 방식 사용
+      const tabs = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+
+      // 명시적 검증 추가
+      if (!tabs || tabs.length === 0) {
+        console.error("[HyperViz] 활성 탭을 찾을 수 없음");
+        return null;
+      }
+
+      const tabId = tabs[0].id;
+
+      // 추가 검증: 탭 ID가 유효한 숫자인지 확인
+      if (typeof tabId !== "number" || tabId <= 0) {
+        console.error("[HyperViz] 유효하지 않은 탭 ID:", tabId);
+        return null;
+      }
+
+      return tabId;
+    } catch (error) {
+      console.error("[HyperViz] 활성 탭 감지 오류:", error);
+      return null;
+    }
+  }
+
+  /**
+   * 현재 탭에 연결
+   */
+  public async connectToCurrentTab(): Promise<boolean> {
+    const tabId = await this.detectActiveTab();
+    if (!tabId) {
+      throw new Error("활성 탭을 찾을 수 없습니다.");
+    }
+    return this.connectToTab(tabId);
+  }
 }
 
 // 커넥터 인스턴스 내보내기
@@ -792,7 +1039,14 @@ export default WorkerConnector.getInstance();
 // 전역 타입 확장
 declare global {
   interface Window {
-    __hypervizExtensionConnector?: any;
+    __hypervizExtensionConnector?: {
+      securityToken: string;
+      initialized: boolean;
+      timestamp: number;
+      workerPool?: any;
+      findWorkerPool: () => any;
+      sendMessageToExtension: (type: string, data: any) => void;
+    };
     hypervizWorkerPool?: any;
     [key: string]: any;
   }

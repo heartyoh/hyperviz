@@ -5,7 +5,7 @@
 import { h } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { stateManager, workerConnector } from "../services";
-import { MonitorSettings } from "../types";
+import { MonitorSettings, LogLevel } from "../types";
 
 // 컴포넌트 속성 인터페이스
 interface ControlPanelProps {
@@ -20,26 +20,61 @@ export function ControlPanel({
   compact = false,
   onSettingsChange,
 }: ControlPanelProps) {
-  const [settings, setSettings] = useState<MonitorSettings>(
-    stateManager.getState().settings
-  );
-  const [workers, setWorkers] = useState<Record<string, any>>(
-    stateManager.getState().workers
-  );
+  // 기본 설정 값으로 초기화
+  const [settings, setSettings] = useState<MonitorSettings>(() => {
+    const defaultSettings: MonitorSettings = {
+      logLevel: "info" as LogLevel,
+      updateInterval: 1000,
+      maxLogEntries: 1000,
+      autoRestart: true,
+    };
+
+    // 기존 저장된 설정과 병합
+    const currentState = stateManager.getState();
+    if (currentState.settings) {
+      return {
+        ...defaultSettings,
+        ...currentState.settings,
+        // LogLevel 타입 호환성 보장
+        logLevel: currentState.settings.logLevel as LogLevel,
+      };
+    }
+
+    return defaultSettings;
+  });
+
+  const [workers, setWorkers] = useState<Record<string, any>>({});
   const [isConnected, setIsConnected] = useState<boolean>(
     stateManager.getState().connected
   );
+  const [isDevMode, setIsDevMode] = useState<boolean>(false);
+
+  // 현재 탭 ID 가져오기
+  const [currentTabId, setCurrentTabId] = useState<number | null>(null);
 
   // 상태 구독
   useEffect(() => {
-    stateManager.subscribe("controlPanel", (state) => {
+    const updateState = (state: any) => {
       if (state.settings) {
-        setSettings(state.settings);
+        setSettings((prevSettings) => ({
+          ...prevSettings,
+          ...state.settings,
+          // LogLevel 타입 호환성 보장
+          logLevel: state.settings.logLevel as LogLevel,
+        }));
       }
       if (state.workers) {
-        setWorkers(state.workers);
+        setWorkers((prevWorkers) => ({ ...prevWorkers, ...state.workers }));
       }
       setIsConnected(state.connected);
+      setCurrentTabId(state.currentTabId);
+    };
+
+    stateManager.subscribe("controlPanel", updateState);
+
+    // 개발 모드 감지 - chrome://extensions 페이지에서 "개발자 모드" 활성화 상태 확인
+    chrome.management.getSelf((info) => {
+      setIsDevMode(info.installType === "development");
     });
 
     return () => {
@@ -71,6 +106,44 @@ export function ControlPanel({
     }
   };
 
+  // 테스트 워커풀 주입 함수
+  const injectTestWorkerPool = async () => {
+    if (!currentTabId) {
+      alert("유효한 탭 ID가 없습니다");
+      return;
+    }
+
+    try {
+      const response = await new Promise<any>((resolve, reject) => {
+        chrome.tabs.sendMessage(
+          currentTabId,
+          { type: "inject_test_worker_pool", timestamp: Date.now() },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              console.error(
+                "[HyperViz] 테스트 워커풀 주입 실패:",
+                chrome.runtime.lastError
+              );
+              reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+            resolve(response);
+          }
+        );
+      });
+
+      console.log("[HyperViz] 테스트 워커풀 주입 응답:", response);
+      alert("테스트 워커풀이 주입되었습니다. 연결을 시도하세요.");
+    } catch (error) {
+      console.error("[HyperViz] 테스트 워커풀 주입 중 오류:", error);
+      alert(
+        `테스트 워커풀 주입 실패: ${
+          error instanceof Error ? error.message : "알 수 없는 오류"
+        }`
+      );
+    }
+  };
+
   // 컴팩트 모드
   if (compact) {
     return (
@@ -90,6 +163,15 @@ export function ControlPanel({
           >
             새로고침
           </button>
+          {isDevMode && (
+            <button
+              className="control-btn debug"
+              onClick={injectTestWorkerPool}
+              title="개발 모드 전용: 테스트 워커풀을 페이지에 주입합니다"
+            >
+              테스트 워커풀 주입
+            </button>
+          )}
         </div>
       </div>
     );
@@ -109,7 +191,10 @@ export function ControlPanel({
               id="logLevel"
               value={settings.logLevel}
               onChange={(e) =>
-                handleSettingChange("logLevel", e.currentTarget.value)
+                handleSettingChange(
+                  "logLevel",
+                  e.currentTarget.value as LogLevel
+                )
               }
               disabled={!isConnected}
             >
@@ -193,6 +278,23 @@ export function ControlPanel({
           </button>
         </div>
       </div>
+
+      {isDevMode && (
+        <div className="debug-section">
+          <h3>디버깅 도구</h3>
+          <div className="debug-info">
+            <div>현재 탭 ID: {currentTabId || "없음"}</div>
+            <div>연결 상태: {isConnected ? "연결됨" : "연결 안됨"}</div>
+          </div>
+          <button
+            className="control-btn debug"
+            onClick={injectTestWorkerPool}
+            title="개발 모드 전용: 테스트 워커풀을 페이지에 주입합니다"
+          >
+            테스트 워커풀 주입
+          </button>
+        </div>
+      )}
     </div>
   );
 }

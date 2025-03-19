@@ -1,5 +1,5 @@
 import { h } from "preact";
-import type { WorkerPoolStats, WorkerInfo } from "../types.js";
+import type { WorkerPoolStats, WorkerInfo } from "../types";
 
 interface DashboardProps {
   stats: WorkerPoolStats;

@@ -164,6 +164,92 @@ function setupExtensionListeners(): void {
     // 탭 상태 정보 정리
     chrome.storage.session.remove(`tabState:${tabId}`);
   });
+
+  // 메시지 처리 리스너
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // 메시지 타입 확인
+    const messageType = message?.type || "unknown";
+    log(`메시지 수신됨: ${messageType}`, { message, sender });
+
+    // 워커풀 확인 요청
+    if (messageType === "check_worker_pool_in_page") {
+      log(`워커풀 확인 요청 처리 중. TabId: ${message.tabId}`);
+
+      // tabId 유효성 확인
+      if (
+        !message.tabId ||
+        typeof message.tabId !== "number" ||
+        message.tabId <= 0
+      ) {
+        const errorMsg = `유효하지 않은 탭 ID: ${message.tabId}`;
+        logError(errorMsg);
+        sendResponse({ exists: false, error: errorMsg });
+        return true;
+      }
+
+      try {
+        log(
+          `탭 ${message.tabId}에 콘텐츠 스크립트로 워커풀 확인 메시지 전송 중...`
+        );
+        // 콘텐츠 스크립트에 워커풀 확인 요청 전송
+        chrome.tabs.sendMessage(
+          message.tabId,
+          { type: "check_worker_pool_in_page", timestamp: Date.now() },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              const errorMsg = chrome.runtime.lastError.message;
+              logError(`워커풀 확인 중 오류: ${errorMsg}`);
+              sendResponse({ exists: false, error: errorMsg });
+              return;
+            }
+
+            log(`워커풀 확인 응답 수신:`, response);
+            sendResponse(response);
+          }
+        );
+        return true; // 비동기 응답 처리
+      } catch (error) {
+        logError("워커풀 확인 중 예외 발생", error);
+        sendResponse({
+          exists: false,
+          error: error instanceof Error ? error.message : "알 수 없는 오류",
+        });
+        return true;
+      }
+    }
+
+    // 탭 ID 요청 처리
+    if (messageType === "get_current_tab_id") {
+      log(`탭 ID 요청 처리 중. 발신자:`, sender);
+
+      // 발신자가 콘텐츠 스크립트인 경우 (sender.tab이 있음)
+      if (sender.tab && typeof sender.tab.id === "number") {
+        log(`발신자의 탭 ID 사용: ${sender.tab.id}`);
+        sendResponse({ success: true, tabId: sender.tab.id });
+        return true;
+      }
+
+      // 발신자가 DevTools 또는 팝업인 경우 (sender.tab이 없음)
+      log(`발신자의 탭 정보 없음, active 탭 쿼리 중...`);
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || !tabs.length || typeof tabs[0].id !== "number") {
+          const errorMsg = "활성 탭을 찾을 수 없거나 탭 ID가 유효하지 않음";
+          logError(errorMsg, tabs);
+          sendResponse({ success: false, error: errorMsg });
+          return;
+        }
+
+        log(`활성 탭 ID 찾음: ${tabs[0].id}`);
+        sendResponse({ success: true, tabId: tabs[0].id });
+      });
+
+      return true; // 비동기 응답 처리
+    }
+
+    // 기타 메시지 처리
+    log(`지원되지 않는 메시지 타입: ${messageType}`);
+    return false; // 다른 메시지 처리기에게 전달
+  });
 }
 
 // 확장 프로그램 초기화 실행
