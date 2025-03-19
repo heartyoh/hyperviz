@@ -74,6 +74,11 @@ function setupEventListeners() {
 function setupCharts() {
   const ctx = document.getElementById("taskChart").getContext("2d");
 
+  // 기존 차트가 있으면 제거
+  if (taskChart) {
+    taskChart.destroy();
+  }
+
   taskChart = new Chart(ctx, {
     type: "doughnut",
     data: {
@@ -107,20 +112,50 @@ function setupCharts() {
 function connectToWorkerPool() {
   updateConnectionStatus("연결 중...", false);
 
-  // 검사 중인 페이지에서 워커풀 객체 확인
-  chrome.devtools.inspectedWindow.eval(
-    `typeof window.hypervizWorkerPool !== 'undefined'`,
-    (hasWorkerPool, isException) => {
-      if (isException || !hasWorkerPool) {
-        updateConnectionStatus("연결 실패: 워커풀을 찾을 수 없음", false);
-        return;
-      }
+  try {
+    // 백그라운드 스크립트를 통해 콘텐츠 스크립트에 연결 요청
+    chrome.runtime.sendMessage(
+      {
+        type: "devtools_connect_request",
+        tabId: chrome.devtools.inspectedWindow.tabId,
+      },
+      (response) => {
+        // 응답 처리 전에 런타임 오류 확인
+        if (chrome.runtime.lastError) {
+          console.error("연결 메시지 전송 오류:", chrome.runtime.lastError);
+          updateConnectionStatus("연결 실패: 메시지 전송 오류", false);
+          return;
+        }
 
-      isConnected = true;
-      updateConnectionStatus("연결됨", true);
-      fetchWorkerPoolData();
-    }
-  );
+        if (!response) {
+          updateConnectionStatus("연결 실패: 응답 없음", false);
+          return;
+        }
+
+        if (response.error) {
+          console.warn("워커풀 연결 실패:", response.error);
+          updateConnectionStatus(`연결 실패: ${response.error}`, false);
+          return;
+        }
+
+        if (!response.exists) {
+          updateConnectionStatus("워커풀을 찾을 수 없음", false);
+          return;
+        }
+
+        console.log("워커풀 연결 성공! 버전:", response.version || "unknown");
+        isConnected = true;
+        updateConnectionStatus("연결됨", true);
+        fetchWorkerPoolData();
+      }
+    );
+  } catch (error) {
+    console.error("연결 시도 중 오류:", error);
+    updateConnectionStatus(
+      "연결 오류: " + (error.message || "알 수 없는 오류"),
+      false
+    );
+  }
 }
 
 // 연결 상태 업데이트
@@ -169,36 +204,43 @@ function fetchWorkerPoolData() {
 
   console.log("워커풀 데이터 가져오는 중...");
 
-  // 현재 스탯 가져오기
-  chrome.devtools.inspectedWindow.eval(
-    `
-    (function() {
-      try {
-        const pool = window.hypervizWorkerPool;
-        if (!pool) return null;
-        
-        return {
-          stats: pool.getStats(),
-          taskInfo: pool.getTaskInfo(),
-          logs: pool.getLogs(50)
-        };
-      } catch (error) {
-        console.error("워커풀 데이터 가져오기 오류:", error);
-        return null;
-      }
-    })()
-    `,
-    (result, isException) => {
-      if (isException || !result) {
-        console.error("워커풀 데이터 가져오기 실패:", isException);
-        updateConnectionStatus("데이터 가져오기 실패", false);
-        return;
-      }
+  try {
+    chrome.runtime.sendMessage(
+      {
+        type: "devtools_fetch_data",
+        tabId: chrome.devtools.inspectedWindow.tabId,
+      },
+      (response) => {
+        // 응답 처리 전에 런타임 오류 확인
+        if (chrome.runtime.lastError) {
+          console.error("데이터 요청 오류:", chrome.runtime.lastError);
+          showError("데이터를 가져올 수 없습니다: 메시지 전송 오류");
+          return;
+        }
 
-      workerPoolData = result;
-      updateUI(result);
-    }
-  );
+        if (!response || !response.success) {
+          const errorMsg =
+            response && response.error ? response.error : "알 수 없는 오류";
+          console.warn("데이터 요청 실패:", errorMsg);
+          showError("데이터를 가져올 수 없습니다: " + errorMsg);
+          return;
+        }
+
+        const data = response.data;
+        if (!data) {
+          showError("워커풀 데이터가 없습니다");
+          return;
+        }
+
+        // 데이터 처리
+        workerPoolData = data;
+        updateUI(data);
+      }
+    );
+  } catch (error) {
+    console.error("데이터 요청 중 오류:", error);
+    showError("데이터 요청 오류: " + (error.message || "알 수 없는 오류"));
+  }
 }
 
 // UI 업데이트
@@ -360,36 +402,62 @@ function applyWorkerPoolSettings() {
     return;
   }
 
-  chrome.devtools.inspectedWindow.eval(
-    `
-    (function() {
-      try {
-        const pool = window.hypervizWorkerPool?.manager;
-        if (!pool) return false;
-        
-        pool.updatePoolConfig({
-          minWorkers: ${minWorkers},
-          maxWorkers: ${maxWorkers},
-          idleTimeout: ${idleTimeout}
-        });
-        
-        pool.setTaskTimeout(${taskTimeout});
-        
-        return true;
-      } catch (error) {
-        console.error("워커풀 설정 변경 오류:", error);
-        return false;
-      }
-    })()
-    `,
-    (result, isException) => {
-      if (isException || !result) {
+  // 웹페이지에서 실행할 함수 정의
+  const applySettingsFunction = function (settings) {
+    try {
+      const pool = window.hypervizWorkerPool?.manager;
+      if (!pool)
+        return { success: false, error: "워커풀 매니저를 찾을 수 없습니다" };
+
+      pool.updatePoolConfig({
+        minWorkers: settings.minWorkers,
+        maxWorkers: settings.maxWorkers,
+        idleTimeout: settings.idleTimeout,
+      });
+
+      pool.setTaskTimeout(settings.taskTimeout);
+
+      return { success: true };
+    } catch (error) {
+      console.error("워커풀 설정 변경 오류:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "알 수 없는 오류",
+      };
+    }
+  };
+
+  // Chrome API를 통해 웹페이지 컨텍스트에서 직접 실행
+  chrome.runtime.sendMessage(
+    {
+      type: "executeScriptInPage",
+      tabId: chrome.devtools.inspectedWindow.tabId,
+      function: applySettingsFunction.toString(),
+      args: [
+        {
+          minWorkers,
+          maxWorkers,
+          idleTimeout,
+          taskTimeout,
+        },
+      ],
+    },
+    (response) => {
+      // 응답 처리
+      if (!response || response.error) {
+        console.error("설정 적용 중 오류:", response?.error || "응답 없음");
         alert("워커풀 설정 적용 실패");
         return;
       }
 
-      alert("워커풀 설정이 성공적으로 적용되었습니다.");
-      fetchWorkerPoolData(); // 업데이트된 데이터 가져오기
+      const result = response.result;
+
+      if (result.success) {
+        alert("워커풀 설정이 성공적으로 적용되었습니다.");
+        fetchWorkerPoolData(); // 업데이트된 데이터 가져오기
+      } else {
+        alert(`워커풀 설정 적용 실패: ${result.error || "알 수 없는 오류"}`);
+      }
     }
   );
 }
@@ -404,30 +472,62 @@ function resetWorkerPoolSettings() {
 
 // 모든 워커 종료
 function terminateAllWorkers() {
-  if (confirm("정말로 모든 워커를 종료하시겠습니까?")) {
-    chrome.devtools.inspectedWindow.eval(
-      `
-      (function() {
-        try {
-          const pool = window.hypervizWorkerPool?.manager;
-          if (!pool) return false;
-          
-          return pool.terminateAllWorkers();
-        } catch (error) {
-          console.error("워커 종료 오류:", error);
-          return false;
-        }
-      })()
-      `,
-      (result, isException) => {
-        if (isException) {
-          alert("워커 종료 중 오류가 발생했습니다.");
+  if (!isConnected) {
+    showError("워커풀에 연결되어 있지 않습니다");
+    return;
+  }
+
+  if (!confirm("정말 모든 워커를 종료하시겠습니까?")) {
+    return;
+  }
+
+  try {
+    chrome.runtime.sendMessage(
+      {
+        type: "devtools_terminate_all_workers",
+        tabId: chrome.devtools.inspectedWindow.tabId,
+      },
+      (response) => {
+        // 응답 처리 전에 런타임 오류 확인
+        if (chrome.runtime.lastError) {
+          console.error("종료 요청 오류:", chrome.runtime.lastError);
+          showError("워커 종료 실패: 메시지 전송 오류");
           return;
         }
 
-        alert("모든 워커가 종료되었습니다.");
-        fetchWorkerPoolData(); // 업데이트된 데이터 가져오기
+        if (!response || !response.success) {
+          const errorMsg =
+            response && response.error ? response.error : "알 수 없는 오류";
+          console.warn("워커 종료 실패:", errorMsg);
+          showError("워커를 종료할 수 없습니다: " + errorMsg);
+          return;
+        }
+
+        console.log("모든 워커가 종료되었습니다");
+        alert("모든 워커가 성공적으로 종료되었습니다.");
+        setTimeout(fetchWorkerPoolData, 500); // 데이터 갱신
       }
     );
+  } catch (error) {
+    console.error("종료 요청 중 오류:", error);
+    showError("워커 종료 오류: " + (error.message || "알 수 없는 오류"));
+  }
+}
+
+// 오류 메시지 표시
+function showError(message) {
+  console.warn("오류:", message);
+  updateConnectionStatus(message, false);
+
+  // 오류 알림 UI에 표시 (옵션)
+  const errorContainer = document.getElementById("error-container");
+  if (errorContainer) {
+    errorContainer.textContent = message;
+    errorContainer.style.display = "block";
+
+    // 3초 후 숨기기
+    setTimeout(() => {
+      errorContainer.style.display = "none";
+    }, 3000);
   }
 }

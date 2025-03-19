@@ -101,16 +101,230 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // sender.tab이 없는 경우도 처리할 수 있도록 수정
   if (!message || typeof message !== "object") return false;
 
-  // executeScriptInPage 요청 처리
-  if (message.type === "executeScriptInPage" && message.tabId) {
-    executeScriptWithScriptingAPI(message.tabId)
-      .then((result) => {
-        sendResponse({ success: result });
+  // DevTools에서 오는 메시지 처리
+  if (message.type === "devtools_connect_request" && message.tabId) {
+    const targetTabId = message.tabId;
+
+    // 콘텐츠 스크립트가 이미 로드되어 있는지 확인하고, 필요하면 로드한 후 워커풀 확인
+    checkOrInjectContentScript(targetTabId)
+      .then(() => {
+        // 콘텐츠 스크립트에 워커풀 확인 요청
+        try {
+          chrome.tabs.sendMessage(
+            targetTabId,
+            { target: "content", action: "checkWorkerPool" },
+            (response) => {
+              if (chrome.runtime.lastError) {
+                console.warn(
+                  "워커풀 확인 요청 오류:",
+                  chrome.runtime.lastError.message
+                );
+                sendResponse({ error: chrome.runtime.lastError.message });
+                return;
+              }
+
+              // 응답이 없거나 오류가 있는 경우
+              if (!response || response.error) {
+                sendResponse({
+                  exists: false,
+                  error: response?.error || "워커풀을 확인할 수 없습니다",
+                });
+                return;
+              }
+
+              // 성공적으로 워커풀 정보 확인
+              sendResponse({
+                exists: true,
+                version: response.version || "unknown",
+                info: response.info,
+              });
+            }
+          );
+        } catch (error) {
+          console.error("워커풀 확인 메시지 전송 오류:", error);
+          sendResponse({
+            exists: false,
+            error: error instanceof Error ? error.message : "메시지 전송 오류",
+          });
+        }
       })
-      .catch((error) => {
-        console.error("스크립트 실행 오류:", error);
-        sendResponse({ success: false, error: error.message });
+      .catch((error: Error) => {
+        console.error("콘텐츠 스크립트 로드 오류:", error);
+        sendResponse({
+          exists: false,
+          error: error.message || "콘텐츠 스크립트 로드 실패",
+        });
       });
+
+    return true; // 비동기 응답을 위해 true 반환
+  }
+
+  // 워커풀 데이터 가져오기 요청
+  if (message.type === "devtools_fetch_data" && message.tabId) {
+    const targetTabId = message.tabId;
+
+    try {
+      chrome.tabs.sendMessage(
+        targetTabId,
+        { target: "content", action: "getWorkerPoolData" },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            console.warn("데이터 요청 오류:", chrome.runtime.lastError.message);
+            sendResponse({
+              success: false,
+              error: chrome.runtime.lastError.message,
+            });
+            return;
+          }
+
+          if (!response || response.error) {
+            sendResponse({
+              success: false,
+              error: response?.error || "데이터를 받을 수 없습니다",
+            });
+            return;
+          }
+
+          sendResponse({
+            success: true,
+            data: response.data,
+          });
+        }
+      );
+    } catch (error) {
+      console.error("데이터 요청 메시지 전송 오류:", error);
+      sendResponse({
+        success: false,
+        error: error instanceof Error ? error.message : "메시지 전송 오류",
+      });
+    }
+
+    return true; // 비동기 응답을 위해 true 반환
+  }
+
+  // 모든 워커 종료 요청
+  if (message.type === "devtools_terminate_all_workers" && message.tabId) {
+    const targetTabId = message.tabId;
+
+    try {
+      chrome.tabs.sendMessage(
+        targetTabId,
+        { target: "content", action: "terminateAllWorkers" },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            console.warn(
+              "워커 종료 요청 오류:",
+              chrome.runtime.lastError.message
+            );
+            sendResponse({
+              success: false,
+              error: chrome.runtime.lastError.message,
+            });
+            return;
+          }
+
+          if (!response || response.error) {
+            sendResponse({
+              success: false,
+              error: response?.error || "워커를 종료할 수 없습니다",
+            });
+            return;
+          }
+
+          sendResponse({
+            success: true,
+            message: "모든 워커가 종료되었습니다",
+          });
+        }
+      );
+    } catch (error) {
+      console.error("워커 종료 요청 메시지 전송 오류:", error);
+      sendResponse({
+        success: false,
+        error: error instanceof Error ? error.message : "메시지 전송 오류",
+      });
+    }
+
+    return true; // 비동기 응답을 위해 true 반환
+  }
+
+  // executeScriptInPage 요청 처리
+  if (message.type === "executeScriptInPage") {
+    try {
+      // sender.tab이 있으면 sender.tab.id를 사용, 아니면 전달된 tabId 사용 (DevTools 패널에서 온 경우)
+      const targetTabId = (sender.tab && sender.tab.id) || message.tabId;
+
+      // tabId가 없으면 오류 반환
+      if (!targetTabId || targetTabId < 0) {
+        console.error("유효한 탭 ID가 없습니다:", targetTabId);
+        sendResponse({
+          success: false,
+          error: `유효한 탭 ID가 없습니다: ${targetTabId}`,
+        });
+        return true;
+      }
+
+      // 함수 문자열과 인수를 가져옴
+      const functionStr = message.function;
+      const args = message.args || [];
+
+      // 함수 문자열을 실행 가능한 코드로 변환하여 executeScript로 실행
+      const scriptToExecute = `
+        (function() {
+          const fn = ${functionStr};
+          return fn(${args.map((arg: any) => JSON.stringify(arg)).join(",")});
+        })()
+      `;
+
+      console.log(`[DEBUG] 스크립트 실행: tabId=${targetTabId}`);
+
+      chrome.scripting
+        .executeScript({
+          target: { tabId: targetTabId },
+          world: "MAIN", // 웹페이지의 JavaScript 컨텍스트에서 실행
+          func: function (scriptCode: string) {
+            try {
+              // scriptToExecute를 eval로 실행
+              return eval(scriptCode);
+            } catch (error) {
+              return {
+                success: false,
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "스크립트 실행 중 오류 발생",
+              };
+            }
+          },
+          args: [scriptToExecute],
+        })
+        .then((results) => {
+          if (results && results.length > 0) {
+            sendResponse({ success: true, result: results[0].result });
+          } else {
+            sendResponse({
+              success: false,
+              error: "스크립트 실행 결과가 없습니다",
+            });
+          }
+        })
+        .catch((error) => {
+          console.error("스크립팅 API 오류:", error);
+          sendResponse({
+            success: false,
+            error: error instanceof Error ? error.message : "스크립팅 API 오류",
+          });
+        });
+    } catch (error) {
+      console.error("스크립트 실행 요청 처리 중 오류:", error);
+      sendResponse({
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "스크립트 실행 요청 처리 중 오류",
+      });
+    }
 
     return true; // 비동기 응답을 위해 true 반환
   }
@@ -179,10 +393,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     updateIcon(messageTabId, false);
 
     // 팝업에 워커풀 발견 알림
-    chrome.runtime.sendMessage({
-      type: "workerPoolDiscovered",
-      tabId: messageTabId,
-    });
+    try {
+      chrome.runtime.sendMessage({
+        type: "workerPoolDiscovered",
+        tabId: messageTabId,
+      });
+    } catch (error) {
+      console.warn("메시지 전송 중 오류 발생:", error);
+    }
 
     return false;
   }
@@ -203,21 +421,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // 팝업에 데이터 전달 (포트 사용)
     sendPopupMessage("stats", message.data);
 
-    // 팝업에 데이터 전달 (일반 메시지 - 백업)
-    chrome.runtime.sendMessage({
-      type: "workerPoolDataUpdate",
-      data: message.data,
-    });
-
     // DevTools에 데이터 전달 (해당 탭의 DevTools가 열려있는 경우)
     if (DevToolsConnection.isDevToolsConnected(messageTabId)) {
-      DevToolsConnection.sendWorkerPoolDataToDevTools(
-        messageTabId,
-        message.data
-      );
+      try {
+        DevToolsConnection.sendWorkerPoolDataToDevTools(
+          messageTabId,
+          message.data
+        );
+      } catch (error) {
+        console.warn("DevTools에 메시지 전송 중 오류 발생:", error);
+      }
     }
 
-    return false;
+    // 팝업에 데이터 전달 (일반 메시지 - 백업)
+    try {
+      chrome.runtime.sendMessage({
+        type: "workerPoolDataUpdate",
+        data: message.data,
+      });
+    } catch (error) {
+      console.warn("메시지 전송 중 오류 발생:", error);
+    }
+
+    return true;
   }
 
   // 연결 가능한 탭 목록 요청
@@ -505,6 +731,42 @@ async function executeScriptWithScriptingAPI(
 }
 
 /**
+ * 콘텐츠 스크립트가 이미 로드되어 있는지 확인하고, 필요하면 로드
+ */
+async function checkOrInjectContentScript(tabId: number): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    try {
+      // 먼저 콘텐츠 스크립트가 이미 로드되었는지 확인
+      chrome.tabs.sendMessage(tabId, { type: "ping" }, (response) => {
+        // 응답이 있으면 이미 로드된 것
+        if (response && !chrome.runtime.lastError) {
+          resolve(true);
+          return;
+        }
+
+        // 오류가 있거나 응답이 없으면 스크립트 로드 시도
+        chrome.scripting
+          .executeScript({
+            target: { tabId },
+            files: ["content.js"],
+          })
+          .then(() => {
+            console.log("콘텐츠 스크립트 삽입 성공");
+            resolve(true);
+          })
+          .catch((error: Error) => {
+            console.error("콘텐츠 스크립트 삽입 오류:", error);
+            reject(error);
+          });
+      });
+    } catch (error) {
+      console.error("콘텐츠 스크립트 확인 오류:", error);
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
+}
+
+/**
  * 콘텐츠 스크립트와의 연결 관리
  */
 chrome.runtime.onConnect.addListener((newPort) => {
@@ -607,26 +869,19 @@ function updateConnectionStatus(isConnected: boolean) {
  * 아이콘 업데이트
  */
 function updateIcon(tabId: number, isConnected: boolean) {
-  if (isConnected) {
-    chrome.action.setIcon({
-      tabId,
-      path: {
-        16: "../assets/icon-16.png",
-        32: "../assets/icon-32.png",
-        48: "../assets/icon-48.png",
-        128: "../assets/icon-128.png",
-      },
-    });
-  } else {
-    chrome.action.setIcon({
-      tabId,
-      path: {
-        16: "../assets/icon-gray-16.png",
-        32: "../assets/icon-gray-32.png",
-        48: "../assets/icon-gray-48.png",
-        128: "../assets/icon-gray-128.png",
-      },
-    });
+  try {
+    // 아이콘 설정 시도 (경로 문제로 오류 발생 가능하므로 try-catch로 감싸기)
+    if (isConnected) {
+      chrome.action.setBadgeText({ tabId, text: "ON" });
+      chrome.action.setBadgeBackgroundColor({ tabId, color: "#4CAF50" });
+    } else {
+      chrome.action.setBadgeText({ tabId, text: "OFF" });
+      chrome.action.setBadgeBackgroundColor({ tabId, color: "#F44336" });
+    }
+
+    // 아이콘 설정은 생략 - setBadgeText만으로 충분함
+  } catch (error) {
+    console.error("아이콘 업데이트 오류:", error);
   }
 }
 
@@ -818,6 +1073,7 @@ function handleRequestLogs(
 async function connectToWorkerPool(
   targetTabId: number
 ): Promise<Record<string, any>> {
+  console.log("[DEBUG] 워커풀 연결 시도 중...");
   return new Promise((resolve) => {
     try {
       // 스크립트 삽입 시도
@@ -827,32 +1083,47 @@ async function connectToWorkerPool(
           files: ["content.js"],
         })
         .then(() => {
-          // 연결 요청 전송
-          chrome.tabs.sendMessage(
-            targetTabId,
-            { type: "connect" },
-            (response) => {
-              if (chrome.runtime.lastError) {
-                resolve({
-                  success: false,
-                  message: `연결 오류: ${chrome.runtime.lastError.message}`,
-                });
-                return;
-              }
+          // 연결 요청 전송 - 오류 처리 추가
+          try {
+            chrome.tabs.sendMessage(
+              targetTabId,
+              { type: "connect" },
+              (response) => {
+                // 런타임 오류 확인
+                if (chrome.runtime.lastError) {
+                  console.warn(
+                    "연결 메시지 전송 오류:",
+                    chrome.runtime.lastError.message
+                  );
+                  resolve({
+                    success: false,
+                    message: `연결 오류: ${chrome.runtime.lastError.message}`,
+                  });
+                  return;
+                }
 
-              if (response && response.success) {
-                resolve(response);
-              } else {
-                resolve({
-                  success: false,
-                  message:
-                    response && response.message
-                      ? response.message
-                      : "알 수 없는 오류",
-                });
+                if (response && response.success) {
+                  resolve(response);
+                } else {
+                  resolve({
+                    success: false,
+                    message:
+                      response && response.message
+                        ? response.message
+                        : "알 수 없는 오류",
+                  });
+                }
               }
-            }
-          );
+            );
+          } catch (msgError) {
+            console.error("메시지 전송 중 예외:", msgError);
+            resolve({
+              success: false,
+              message: `메시지 전송 오류: ${
+                msgError instanceof Error ? msgError.message : "알 수 없는 오류"
+              }`,
+            });
+          }
         })
         .catch((error) => {
           resolve({
@@ -880,38 +1151,47 @@ async function disconnectFromWorkerPool(
   return new Promise((resolve) => {
     try {
       // 연결 해제 요청 전송
-      chrome.tabs.sendMessage(
-        targetTabId,
-        { type: "disconnect" },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            // 탭이 더 이상 존재하지 않을 수 있음
-            console.warn(
-              `탭 메시지 전송 오류: ${chrome.runtime.lastError.message}`
-            );
-            resolve({ success: true, message: "연결이 해제되었습니다." });
-            return;
-          }
+      try {
+        chrome.tabs.sendMessage(
+          targetTabId,
+          { type: "disconnect" },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              // 탭이 더 이상 존재하지 않을 수 있음
+              console.warn(
+                `탭 메시지 전송 오류: ${chrome.runtime.lastError.message}`
+              );
+              resolve({ success: true, message: "연결이 해제되었습니다." });
+              return;
+            }
 
-          if (response && response.success) {
-            resolve(response);
-          } else {
-            resolve({
-              success: false,
-              message:
-                response && response.message
-                  ? response.message
-                  : "알 수 없는 오류",
-            });
+            if (response && response.success) {
+              resolve(response);
+            } else {
+              resolve({
+                success: false,
+                message:
+                  response && response.message
+                    ? response.message
+                    : "알 수 없는 오류",
+              });
+            }
           }
-        }
-      );
+        );
+      } catch (msgError) {
+        console.error("메시지 전송 중 예외:", msgError);
+        // 메시지 전송 실패는 연결 해제로 간주
+        resolve({ success: true, message: "연결이 해제되었습니다." });
+      }
     } catch (error) {
+      console.error("연결 해제 시도 중 예외:", error);
+      // 어쨌든 연결은 해제된 것으로 간주
       resolve({
-        success: false,
-        message: `연결 해제 오류: ${
-          error instanceof Error ? error.message : "알 수 없는 오류"
-        }`,
+        success: true,
+        message:
+          "연결이 해제되었습니다. (오류 발생: " +
+          (error instanceof Error ? error.message : "알 수 없는 오류") +
+          ")",
       });
     }
   });
@@ -1127,3 +1407,6 @@ chrome.action.setBadgeBackgroundColor({ color: "#F44336" });
 
 // 확장 프로그램 초기화
 initialize();
+
+// 모든 단계에 로깅 추가
+// chrome.devtools.inspectedWindow.eval 호출 제거 (백그라운드 스크립트에서 사용 불가)

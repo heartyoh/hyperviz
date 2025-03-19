@@ -57,6 +57,29 @@ export interface UnifiedWorkerPoolManagerConfig {
 
   // 확장 프로그램 설정
   enableExtensionCommunication?: boolean;
+
+  // 전역 객체에 등록 여부
+  registerGlobalInstance?: boolean;
+}
+
+// 전역 window 타입 확장 (TypeScript에서 window.hypervizWorkerPool 사용 가능하도록)
+declare global {
+  interface Window {
+    hypervizWorkerPool?: {
+      manager: UnifiedWorkerPoolManager;
+      getStats: () => Record<string, any>;
+      getLogs: (count?: number) => LogEntry[];
+      getTaskInfo: () => Record<string, any>;
+      terminateAllWorkers: () => boolean;
+      restartWorker: (workerType: string, workerId: string) => boolean;
+      terminateWorker: (workerType: string, workerId: string) => boolean;
+      reconfigurePool: (
+        workerType: string,
+        config: Partial<PoolConfig>
+      ) => boolean;
+      version: string;
+    };
+  }
 }
 
 /**
@@ -70,6 +93,7 @@ export class UnifiedWorkerPoolManager {
   private isInitialized: boolean;
   private extensionCommunicationEnabled: boolean;
   private messageListener: ((event: MessageEvent) => void) | null = null;
+  private registerGlobalInstance: boolean;
 
   /**
    * 통합 워커 풀 관리자 생성자
@@ -108,6 +132,7 @@ export class UnifiedWorkerPoolManager {
     this.isInitialized = false;
     this.extensionCommunicationEnabled =
       config.enableExtensionCommunication !== false;
+    this.registerGlobalInstance = config.registerGlobalInstance !== false;
 
     // 초기 풀 생성
     if (config.initialPools) {
@@ -146,6 +171,11 @@ export class UnifiedWorkerPoolManager {
     // 확장 프로그램 통신 설정
     if (this.extensionCommunicationEnabled && typeof window !== "undefined") {
       this.setupExtensionCommunication();
+
+      // 전역 객체에 인스턴스 등록 (확장 프로그램과의 통합을 위해)
+      if (this.registerGlobalInstance) {
+        this.registerGlobalHypervizInstance();
+      }
     }
 
     this.isInitialized = true;
@@ -725,5 +755,141 @@ export class UnifiedWorkerPoolManager {
     }
 
     return tasks;
+  }
+
+  /**
+   * 모든 워커 종료
+   * 확장 프로그램과의 호환성을 위한 메서드
+   *
+   * @returns 성공 여부
+   */
+  terminateAllWorkers(): boolean {
+    try {
+      // 모든 풀의 모든 워커 종료
+      const pools = Array.from(this.poolFactory.getAllPools().values());
+      let allSuccess = true;
+
+      for (const pool of pools) {
+        try {
+          // 풀의 모든 워커 강제 종료
+          const success = pool.terminateAllWorkers();
+          if (!success) {
+            allSuccess = false;
+          }
+        } catch (error) {
+          this.monitor.log(
+            LogLevel.ERROR,
+            `풀 워커 종료 중 오류: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+            pool.getType()
+          );
+          allSuccess = false;
+        }
+      }
+
+      return allSuccess;
+    } catch (error) {
+      this.monitor.log(
+        LogLevel.ERROR,
+        `모든 워커 종료 중 오류: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        "SYSTEM"
+      );
+      return false;
+    }
+  }
+
+  /**
+   * 특정 워커 종료
+   *
+   * @param workerType 워커 유형
+   * @param workerId 워커 ID
+   * @returns 성공 여부
+   */
+  terminateWorker(workerType: string, workerId: string): boolean {
+    try {
+      const pool = this.getPool(workerType);
+      if (!pool) {
+        this.monitor.log(
+          LogLevel.ERROR,
+          `워커 종료 실패: 풀을 찾을 수 없음 (${workerType})`,
+          "SYSTEM"
+        );
+        return false;
+      }
+
+      const success = pool.terminateWorker(workerId);
+      if (success) {
+        this.monitor.log(
+          LogLevel.INFO,
+          `워커가 성공적으로 종료됨: ${workerId}`,
+          workerType
+        );
+      } else {
+        this.monitor.log(
+          LogLevel.WARN,
+          `워커 종료 실패: ${workerId}`,
+          workerType
+        );
+      }
+
+      return success;
+    } catch (error) {
+      this.monitor.log(
+        LogLevel.ERROR,
+        `워커 종료 중 오류: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        workerType
+      );
+      return false;
+    }
+  }
+
+  /**
+   * 워커풀 정보를 얻기 위한 간단한 인터페이스 (확장 프로그램용)
+   */
+  getStats(): Record<string, any> {
+    return this.getPoolStatsObject();
+  }
+
+  /**
+   * 태스크 정보를 얻기 위한 간단한 인터페이스 (확장 프로그램용)
+   */
+  getTaskInfo(): Record<string, any> {
+    return this.getTaskInfoObject();
+  }
+
+  /**
+   * 현재 인스턴스를 전역 window 객체에 등록
+   * 크롬 확장 프로그램과의 통합을 위해 필요함
+   * @private
+   */
+  private registerGlobalHypervizInstance(): void {
+    if (typeof window !== "undefined") {
+      // 인터페이스 생성 및 전역 객체에 할당
+      window.hypervizWorkerPool = {
+        manager: this,
+        getStats: () => this.getStats(),
+        getLogs: (count) => this.getLogs(count),
+        getTaskInfo: () => this.getTaskInfo(),
+        terminateAllWorkers: () => this.terminateAllWorkers(),
+        restartWorker: (workerType, workerId) =>
+          this.tryRestartWorker(workerType, workerId),
+        terminateWorker: (workerType, workerId) =>
+          this.terminateWorker(workerType, workerId),
+        reconfigurePool: (workerType, config) =>
+          this.reconfigurePool(workerType, config),
+        version: "1.0.0",
+      };
+
+      this.monitor.log(
+        LogLevel.INFO,
+        "HyperViz 인스턴스가 전역 객체에 등록되었습니다.",
+        "SYSTEM"
+      );
+    }
   }
 }

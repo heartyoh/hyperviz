@@ -681,4 +681,66 @@ export class WorkerPool extends EventEmitter {
   getWorkers(): WorkerInstance[] {
     return Array.from(this.workers.values()).map((data) => ({ ...data.info }));
   }
+
+  /**
+   * 워커 풀 유형 반환
+   *
+   * @returns 워커 유형
+   */
+  getType(): WorkerType | string {
+    return this.type;
+  }
+
+  /**
+   * 워커 수 반환
+   *
+   * @returns 워커 수
+   */
+  getWorkerCount(): number {
+    return this.workers.size;
+  }
+
+  /**
+   * 특정 워커 종료
+   *
+   * @param workerId 워커 ID
+   * @returns 성공 여부
+   */
+  terminateWorker(workerId: string): boolean {
+    if (!this.workers.has(workerId)) {
+      return false;
+    }
+
+    try {
+      return this.removeWorker(workerId);
+    } catch (error) {
+      console.error(`워커 종료 중 오류: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * 모든 워커 종료
+   *
+   * @returns 성공 여부
+   */
+  terminateAllWorkers(): boolean {
+    try {
+      // 모든 워커 ID 복사 (반복 중 삭제를 위해)
+      const workerIds = Array.from(this.workers.keys());
+
+      // 각 워커 종료
+      for (const workerId of workerIds) {
+        this.terminateWorker(workerId);
+      }
+
+      // 새 최소 워커 수 생성
+      this.ensureMinWorkers();
+
+      return true;
+    } catch (error) {
+      console.error(`모든 워커 종료 중 오류: ${error}`);
+      return false;
+    }
+  }
 }

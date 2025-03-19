@@ -216,4 +216,13 @@ export class WorkerPoolFactory {
 
     return statsMap;
   }
+
+  /**
+   * 모든 풀 반환
+   *
+   * @returns 모든 풀 맵
+   */
+  getAllPools(): Map<WorkerType | string, WorkerPool> {
+    return new Map(this.pools);
+  }
 }
