@@ -1,6 +1,7 @@
 /**
  * HyperViz 크롬 확장 프로그램 - 백그라운드 스크립트
  */
+import * as DevToolsConnection from "./devtools-connection";
 
 // 워커풀이 탐지된 탭 정보
 interface TabInfo {
@@ -40,6 +41,14 @@ const settings = {
 
 // 팝업 연결 포트
 let popupPort: chrome.runtime.Port | null = null;
+
+// 초기화
+function initialize() {
+  // 개발자 도구 연결 리스너 설정
+  DevToolsConnection.setupDevToolsConnectionListeners();
+
+  console.log("HyperViz 확장 프로그램 백그라운드 스크립트가 초기화되었습니다.");
+}
 
 // 메시지 리스너 설정
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -139,6 +148,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       type: "workerPoolDataUpdate",
       data: message.data,
     });
+
+    // DevTools에 데이터 전달 (해당 탭의 DevTools가 열려있는 경우)
+    if (DevToolsConnection.isDevToolsConnected(messageTabId)) {
+      DevToolsConnection.sendWorkerPoolDataToDevTools(
+        messageTabId,
+        message.data
+      );
+    }
 
     return false;
   }
@@ -856,3 +873,6 @@ function sendPopupMessage(type: string, data: any = {}) {
 // 초기 설정
 chrome.action.setBadgeText({ text: "OFF" });
 chrome.action.setBadgeBackgroundColor({ color: "#F44336" });
+
+// 확장 프로그램 초기화
+initialize();

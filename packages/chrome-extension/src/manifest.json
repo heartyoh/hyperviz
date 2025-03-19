@@ -34,5 +34,6 @@
       "resources": ["assets/*"],
       "matches": ["<all_urls>"]
     }
-  ]
+  ],
+  "devtools_page": "devtools/devtools.html"
 }

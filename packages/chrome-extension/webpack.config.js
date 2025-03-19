@@ -12,6 +12,9 @@ export default {
     popup: "./src/popup/index.tsx",
     background: "./src/background/index.ts",
     content: "./src/content/index.ts",
+    devtools: "./src/devtools/devtools.js",
+    "devtools/panels/worker-pool-panel":
+      "./src/devtools/panels/worker-pool-panel.js",
   },
   output: {
     path: path.resolve(__dirname, "dist"),
@@ -49,6 +52,16 @@ export default {
       template: "./src/popup/index.html",
       filename: "popup.html",
       chunks: ["popup"],
+    }),
+    new HtmlWebpackPlugin({
+      template: "./src/devtools/devtools.html",
+      filename: "devtools/devtools.html",
+      chunks: ["devtools"],
+    }),
+    new HtmlWebpackPlugin({
+      template: "./src/devtools/panels/worker-pool-panel.html",
+      filename: "devtools/panels/worker-pool-panel.html",
+      chunks: ["devtools/panels/worker-pool-panel"],
     }),
     new MiniCssExtractPlugin({
       filename: "[name].css",
