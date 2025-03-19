@@ -3,16 +3,18 @@ import { fileURLToPath } from "url";
 import HtmlWebpackPlugin from "html-webpack-plugin";
 import CopyWebpackPlugin from "copy-webpack-plugin";
 import MiniCssExtractPlugin from "mini-css-extract-plugin";
+import * as sass from "sass";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default {
+  mode: "production",
   entry: {
     popup: "./src/popup/index.tsx",
     background: "./src/background/index.ts",
     content: "./src/content/index.ts",
-    devtools: "./src/devtools/devtools.js",
+    devtools: "./src/devtools/devtools.ts",
     "devtools/panels/worker-pool-panel":
       "./src/devtools/panels/worker-pool-panel.js",
   },
@@ -35,7 +37,21 @@ export default {
       },
       {
         test: /\.s[ac]ss$/i,
-        use: [MiniCssExtractPlugin.loader, "css-loader", "sass-loader"],
+        use: [
+          MiniCssExtractPlugin.loader,
+          "css-loader",
+          {
+            loader: "sass-loader",
+            options: {
+              // Dart Sass 옵션
+              implementation: sass,
+              sassOptions: {
+                // 새로운 API 사용
+                outputStyle: "compressed",
+              },
+            },
+          },
+        ],
       },
       {
         test: /\.(png|svg|jpg|jpeg|gif)$/i,
@@ -47,9 +63,13 @@ export default {
     ],
   },
   resolve: {
-    extensions: [".tsx", ".ts", ".js"],
+    extensions: [".tsx", ".ts", ".js", ".jsx", ".json"],
     alias: {
       "@": path.resolve(__dirname, "src"),
+    },
+    extensionAlias: {
+      ".js": [".ts", ".js"],
+      ".mjs": [".mts", ".mjs"],
     },
   },
   plugins: [

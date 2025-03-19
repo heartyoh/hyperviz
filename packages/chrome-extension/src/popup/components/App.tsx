@@ -1,7 +1,7 @@
 import { h, Fragment } from "preact";
 import { useState, useEffect, useRef } from "preact/hooks";
 import { Header } from "./Header";
-import { Tabs } from "./Tabs";
+import { Tabs } from "../../common/components/Tabs";
 import { Dashboard } from "./Dashboard";
 import { WorkersList } from "./WorkersList";
 import { LogsPanel } from "./LogsPanel";
@@ -13,7 +13,7 @@ import type {
   LogEntry,
   WorkerInfo,
   MonitorSettings,
-} from "../types.js";
+} from "../../common/types";
 
 export function App() {
   // 탭 상태 관리

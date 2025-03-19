@@ -1,32 +1,8 @@
-// 전역 스타일
-:root {
-  --color-primary: #4776e6;
-  --color-secondary: #8e54e9;
-  --color-background: #1e1e2e;
-  --color-surface: #292945;
-  --color-surface-variant: #323252;
-  --color-text-primary: #e8e9ec;
-  --color-text-secondary: #a0a3b1;
-  --color-success: #4caf50;
-  --color-warning: #ffc107;
-  --color-error: #f44336;
-  --color-info: #2196f3;
-  --color-border: rgba(255, 255, 255, 0.12);
-  --shadow-elevation: 0 4px 6px rgba(0, 0, 0, 0.1);
-  --border-radius: 8px;
-  --spacing-unit: 8px;
-}
+@use "../../common/styles/common" as common;
+@use "sass:color";
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
+// 팝업 특화 스타일
 body {
-  font-family: "Noto Sans KR", -apple-system, BlinkMacSystemFont, sans-serif;
-  background-color: var(--color-background);
-  color: var(--color-text-primary);
   width: 360px;
   height: 600px;
   overflow: hidden;
@@ -51,23 +27,8 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: calc(var(--spacing-unit) * 2);
-  background: linear-gradient(
-    to right,
-    var(--color-primary),
-    var(--color-secondary)
-  );
-  color: white;
+  background-color: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
-
-  &__title {
-    font-size: 16px;
-    font-weight: 500;
-  }
-
-  &__actions {
-    display: flex;
-    gap: var(--spacing-unit);
-  }
 }
 
 // 탭 스타일
@@ -195,7 +156,7 @@ body {
     color: white;
 
     &:hover {
-      background-color: darken(#4776e6, 10%);
+      background-color: color.adjust(#4776e6, $lightness: -10%);
     }
   }
 

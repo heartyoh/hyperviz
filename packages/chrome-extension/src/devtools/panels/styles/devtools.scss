@@ -1,0 +1,111 @@
+@use "../../../common/styles/common" as common;
+
+// DevTools 특화 스타일
+body {
+  // DevTools용 스타일 오버라이드
+  overflow-y: auto;
+  height: 100vh;
+  padding: 15px;
+}
+
+// 대시보드 레이아웃
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: auto auto 1fr;
+  gap: 15px;
+  height: calc(100vh - 30px);
+}
+
+// 패널 스타일
+.panel {
+  background-color: var(--color-surface);
+  border-radius: var(--border-radius);
+  padding: 15px;
+  box-shadow: var(--shadow-elevation);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+// 테이블 스타일
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  th {
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
+
+  tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+}
+
+// 로그 스타일
+.logs-container {
+  height: 400px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 13px;
+  background-color: var(--color-surface-variant);
+  border-radius: var(--border-radius);
+  padding: 8px;
+}
+
+.log-item {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.log-info {
+  color: var(--color-info);
+}
+.log-warning {
+  color: var(--color-warning);
+}
+.log-error {
+  color: var(--color-error);
+}
+.log-success {
+  color: var(--color-success);
+}
+
+.log-timestamp {
+  color: var(--color-text-secondary);
+  margin-right: 8px;
+}
+
+// 상태 뱃지
+.status-badge {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 15px;
+  font-size: 12px;
+  font-weight: bold;
+  margin-left: 10px;
+}
+
+.status-online {
+  background-color: rgba(76, 175, 80, 0.2);
+  color: var(--color-success);
+}
+
+.status-offline {
+  background-color: rgba(244, 67, 54, 0.2);
+  color: var(--color-error);
+}
