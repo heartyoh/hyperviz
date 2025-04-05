@@ -104,9 +104,6 @@ export class WorkerPool extends EventEmitter {
   /** 실행 중인 태스크 */
   private runningTasks: Map<string, Task<any, any>> = new Map();
 
-  /** 완료된 태스크 결과 */
-  private taskResults: Map<string, any> = new Map();
-
   /** 태스크 해결자 */
   private taskResolvers: Map<string, { resolve: Function; reject: Function }> =
     new Map();
@@ -508,9 +505,6 @@ export class WorkerPool extends EventEmitter {
         this.workerManager.setWorkerStatus(task.workerId, WorkerStatus.IDLE);
       }
 
-      // 태스크 결과 저장
-      this.taskResults.set(taskId, result);
-
       // 태스크 해결
       const resolver = this.taskResolvers.get(taskId);
       if (resolver) {
@@ -639,12 +633,6 @@ export class WorkerPool extends EventEmitter {
    */
   private cleanupTask(taskId: string): void {
     this.runningTasks.delete(taskId);
-
-    // 오래된 태스크 결과 정리
-    if (this.taskResults.size > 1000) {
-      const oldestResults = Array.from(this.taskResults.keys()).slice(0, 100);
-      oldestResults.forEach((id) => this.taskResults.delete(id));
-    }
   }
 
   /**
@@ -849,11 +837,6 @@ export class WorkerPool extends EventEmitter {
       return pendingTask.status;
     }
 
-    // 태스크 결과 확인
-    if (this.taskResults.has(taskId)) {
-      return TaskStatus.COMPLETED;
-    }
-
     return undefined;
   }
 
@@ -951,7 +934,6 @@ export class WorkerPool extends EventEmitter {
 
       // 맵과 컬렉션 정리
       this.taskResolvers.clear();
-      this.taskResults.clear();
       this.runningTasks.clear();
       this.taskQueues.clear();
       this.taskDurations.length = 0;
