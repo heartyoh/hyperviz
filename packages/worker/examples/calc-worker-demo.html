@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>단순 계산 워커 데모</title>
+    <style>
+      body {
+        font-family: "Arial", sans-serif;
+        line-height: 1.6;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #4a86e8;
+        margin-top: 0;
+      }
+      .actions {
+        margin: 20px 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      button {
+        background-color: #4a86e8;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background 0.3s;
+      }
+      button:hover {
+        background-color: #366dc7;
+      }
+      .stats {
+        margin-top: 20px;
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 4px;
+        border-left: 4px solid #4a86e8;
+      }
+      .logs {
+        margin-top: 20px;
+        height: 300px;
+        overflow-y: auto;
+        background-color: #2d2d2d;
+        color: #f1f1f1;
+        padding: 10px;
+        border-radius: 4px;
+        font-family: monospace;
+      }
+      .task-info {
+        margin-top: 20px;
+        background-color: #e8f4ff;
+        padding: 15px;
+        border-radius: 4px;
+      }
+      .calculator {
+        margin-top: 20px;
+        background-color: #fff8e1;
+        padding: 15px;
+        border-radius: 4px;
+        border-left: 4px solid #ffa000;
+      }
+      .calculator-form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .calculator-form label {
+        display: block;
+        margin-bottom: 5px;
+      }
+      .form-group {
+        margin-bottom: 10px;
+      }
+      .result-panel {
+        margin-top: 20px;
+        padding: 15px;
+        background-color: #e0f7fa;
+        border-radius: 4px;
+        border-left: 4px solid #00838f;
+      }
+      .result-content {
+        margin-top: 10px;
+        font-family: monospace;
+        background-color: #f5f5f5;
+        padding: 10px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+      }
+      .warning {
+        color: #ff6d00;
+        font-weight: bold;
+      }
+      .success {
+        color: #00c853;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>단순 계산 워커 데모</h1>
+      <p>
+        이 데모는 웹 브라우저와 Node.js 환경에서 동작하는 단순 계산 워커를
+        보여줍니다. 워커는 메인 스레드와는 별도의 스레드에서 계산 작업을
+        처리합니다.
+      </p>
+
+      <div class="calculator">
+        <h3>계산 작업 실행</h3>
+        <div class="calculator-form">
+          <div class="form-group">
+            <label for="operation">연산 유형:</label>
+            <select id="operation">
+              <option value="add">덧셈</option>
+              <option value="multiply">곱셈</option>
+              <option value="factorial">팩토리얼</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="numberInputsContainer">
+            <div id="addMultiplyInputs">
+              <label for="numberA">첫 번째 숫자:</label>
+              <input type="number" id="numberA" value="10" />
+              <label for="numberB">두 번째 숫자:</label>
+              <input type="number" id="numberB" value="20" />
+            </div>
+            <div id="factorialInputs" style="display: none">
+              <label for="factorialN">숫자(N):</label>
+              <input
+                type="number"
+                id="factorialN"
+                value="10"
+                min="0"
+                max="100"
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="delay">처리 지연 시간(ms):</label>
+            <input type="number" id="delay" value="500" min="0" max="5000" />
+          </div>
+
+          <button id="executeTask">계산 실행</button>
+          <button id="executeMultipleTasks">여러 계산 실행 (10개)</button>
+        </div>
+      </div>
+
+      <div class="stats" id="workerStats">
+        <h3>워커 상태</h3>
+        <div>활성 태스크: <span id="activeTaskCount">0</span></div>
+        <div>처리된 태스크: <span id="totalTasksProcessed">0</span></div>
+        <div>마지막 태스크 ID: <span id="lastTaskId">없음</span></div>
+      </div>
+
+      <div class="task-info" id="taskInfo">
+        <h3>태스크 정보</h3>
+        <div>총 태스크: <span id="totalTasks">0</span></div>
+        <div>완료된 태스크: <span id="completedTasks">0</span></div>
+        <div>실패한 태스크: <span id="failedTasks">0</span></div>
+      </div>
+
+      <div class="result-panel">
+        <h3>계산 결과</h3>
+        <div id="resultContent" class="result-content">
+          아직 결과가 없습니다.
+        </div>
+      </div>
+
+      <div class="logs" id="logs"></div>
+    </div>
+
+    <script>
+      // 전역 변수
+      let worker;
+      let taskCounter = {
+        total: 0,
+        completed: 0,
+        failed: 0,
+      };
+      let taskIdCounter = 0;
+
+      // 로그 추가 함수
+      function addLog(message) {
+        const logs = document.getElementById("logs");
+        const logEntry = document.createElement("div");
+        logEntry.textContent = `[${new Date().toISOString()}] ${message}`;
+        logs.appendChild(logEntry);
+        logs.scrollTop = logs.scrollHeight;
+      }
+
+      // 워커 상태 업데이트 함수
+      function updateWorkerStats(stats) {
+        document.getElementById("activeTaskCount").textContent =
+          stats.activeTaskCount;
+        document.getElementById("totalTasksProcessed").textContent =
+          stats.totalTasksProcessed;
+        document.getElementById("lastTaskId").textContent =
+          stats.lastTaskId || "없음";
+      }
+
+      // 태스크 상태 업데이트 함수
+      function updateTaskStats() {
+        document.getElementById("totalTasks").textContent = taskCounter.total;
+        document.getElementById("completedTasks").textContent =
+          taskCounter.completed;
+        document.getElementById("failedTasks").textContent = taskCounter.failed;
+      }
+
+      // 결과 표시 함수
+      function showResult(result) {
+        const resultContentElement = document.getElementById("resultContent");
+
+        if (result) {
+          const formattedResult = JSON.stringify(result, null, 2);
+          resultContentElement.textContent = formattedResult;
+          resultContentElement.classList.add("success");
+          setTimeout(() => {
+            resultContentElement.classList.remove("success");
+          }, 1000);
+        } else {
+          resultContentElement.textContent = "계산 결과가 없습니다.";
+        }
+      }
+
+      // 워커 초기화 함수
+      function initializeWorker() {
+        addLog("계산 워커 초기화 중...");
+
+        try {
+          // 웹 워커 생성
+          worker = new Worker("../dist/examples/simple-calc-worker.js", {
+            type: "module",
+          });
+
+          // 초기화 메시지 전송
+          worker.postMessage({ __workerInit: true });
+
+          // 메시지 수신 이벤트 리스너
+          worker.addEventListener("message", (event) => {
+            const response = event.data;
+
+            // 워커 상태 업데이트
+            if (response.workerStats) {
+              updateWorkerStats(response.workerStats);
+            }
+
+            // 태스크 상태에 따른 처리
+            if (response.status === "completed") {
+              addLog(
+                `태스크 ${response.taskId} 완료: ${response.result.operation} 연산 결과 = ${response.result.result}`
+              );
+              taskCounter.completed++;
+              showResult(response.result);
+            } else if (response.status === "error") {
+              addLog(`태스크 ${response.taskId} 오류: ${response.error}`);
+              taskCounter.failed++;
+            } else if (response.status === "progress") {
+              addLog(
+                `태스크 ${response.taskId} 진행 상황: ${response.progress.percent}%`
+              );
+            }
+
+            updateTaskStats();
+          });
+
+          // 오류 이벤트 리스너
+          worker.addEventListener("error", (error) => {
+            console.error("워커 오류:", error);
+            addLog(`워커 오류: ${error.message}`);
+          });
+
+          addLog("계산 워커가 성공적으로 초기화되었습니다.");
+        } catch (error) {
+          console.error("워커 초기화 오류:", error);
+          addLog(`워커 초기화 오류: ${error.message}`);
+        }
+      }
+
+      // 계산 태스크 실행 함수
+      function executeTask() {
+        if (!worker) {
+          addLog("오류: 워커가 초기화되지 않았습니다.");
+          return;
+        }
+
+        // 선택된 연산 유형과 입력값 가져오기
+        const operation = document.getElementById("operation").value;
+        const delay = parseInt(document.getElementById("delay").value, 10) || 0;
+        const taskId = `task-${Date.now()}-${++taskIdCounter}`;
+
+        // 연산 유형에 따른 데이터 구성
+        let data;
+        if (operation === "factorial") {
+          const n =
+            parseInt(document.getElementById("factorialN").value, 10) || 0;
+          data = { n, delay };
+          addLog(`팩토리얼 계산 태스크 실행: n = ${n}, 지연 = ${delay}ms`);
+        } else {
+          const a = parseInt(document.getElementById("numberA").value, 10) || 0;
+          const b = parseInt(document.getElementById("numberB").value, 10) || 0;
+          data = { a, b, delay };
+          addLog(
+            `${
+              operation === "add" ? "덧셈" : "곱셈"
+            } 계산 태스크 실행: a = ${a}, b = ${b}, 지연 = ${delay}ms`
+          );
+        }
+
+        // 워커에 메시지 전송
+        worker.postMessage({
+          taskId,
+          type: operation,
+          data,
+        });
+
+        // 태스크 카운터 증가
+        taskCounter.total++;
+        updateTaskStats();
+
+        return taskId;
+      }
+
+      // 여러 태스크 실행 함수
+      function executeMultipleTasks(count = 10) {
+        if (!worker) {
+          addLog("오류: 워커가 초기화되지 않았습니다.");
+          return;
+        }
+
+        addLog(`${count}개의 태스크 실행 중...`);
+
+        const operations = ["add", "multiply", "factorial"];
+
+        for (let i = 0; i < count; i++) {
+          setTimeout(() => {
+            // 연산 유형 랜덤 선택
+            const operation =
+              operations[Math.floor(Math.random() * operations.length)];
+            document.getElementById("operation").value = operation;
+
+            // 연산 유형에 따른 입력필드 표시/숨김 처리
+            updateInputFields();
+
+            // 랜덤 입력값 설정
+            if (operation === "factorial") {
+              document.getElementById("factorialN").value =
+                Math.floor(Math.random() * 15) + 5;
+            } else {
+              document.getElementById("numberA").value =
+                Math.floor(Math.random() * 100) + 1;
+              document.getElementById("numberB").value =
+                Math.floor(Math.random() * 100) + 1;
+            }
+
+            // 랜덤 지연 시간 설정
+            document.getElementById("delay").value =
+              Math.floor(Math.random() * 1000) + 100;
+
+            // 태스크 실행
+            executeTask();
+          }, i * 300); // 300ms 간격으로 실행
+        }
+      }
+
+      // 연산 유형 변경에 따른 입력필드 업데이트
+      function updateInputFields() {
+        const operation = document.getElementById("operation").value;
+        const addMultiplyInputs = document.getElementById("addMultiplyInputs");
+        const factorialInputs = document.getElementById("factorialInputs");
+
+        if (operation === "factorial") {
+          addMultiplyInputs.style.display = "none";
+          factorialInputs.style.display = "block";
+        } else {
+          addMultiplyInputs.style.display = "block";
+          factorialInputs.style.display = "none";
+        }
+      }
+
+      // 이벤트 리스너 등록
+      document.addEventListener("DOMContentLoaded", () => {
+        // 워커 초기화
+        initializeWorker();
+
+        // 연산 유형 변경 이벤트
+        document
+          .getElementById("operation")
+          .addEventListener("change", updateInputFields);
+
+        // 계산 실행 버튼 이벤트
+        document
+          .getElementById("executeTask")
+          .addEventListener("click", executeTask);
+
+        // 여러 계산 실행 버튼 이벤트
+        document
+          .getElementById("executeMultipleTasks")
+          .addEventListener("click", () => {
+            executeMultipleTasks();
+          });
+      });
+    </script>
+  </body>
+</html>

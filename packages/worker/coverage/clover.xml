@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1743836939796" clover="3.2.0">
-  <project timestamp="1743836939796" name="All files">
-    <metrics statements="732" coveredstatements="237" conditionals="258" coveredconditionals="45" methods="163" coveredmethods="54" elements="1153" coveredelements="336" complexity="0" loc="732" ncloc="732" packages="4" files="10" classes="10"/>
+<coverage generated="1743837673820" clover="3.2.0">
+  <project timestamp="1743837673820" name="All files">
+    <metrics statements="653" coveredstatements="237" conditionals="214" coveredconditionals="45" methods="147" coveredmethods="54" elements="1014" coveredelements="336" complexity="0" loc="653" ncloc="653" packages="4" files="9" classes="9"/>
     <package name="src">
       <metrics statements="9" coveredstatements="9" conditionals="0" coveredconditionals="0" methods="7" coveredmethods="1"/>
       <file name="index.ts" path="/Users/super/Documents/GitHub/hyperviz/packages/worker/src/index.ts">
@@ -18,7 +18,7 @@
       </file>
     </package>
     <package name="src.core">
-      <metrics statements="669" coveredstatements="186" conditionals="238" coveredconditionals="30" methods="143" coveredmethods="44"/>
+      <metrics statements="590" coveredstatements="186" conditionals="194" coveredconditionals="30" methods="127" coveredmethods="44"/>
       <file name="event-hub.ts" path="/Users/super/Documents/GitHub/hyperviz/packages/worker/src/core/event-hub.ts">
         <metrics statements="34" coveredstatements="31" conditionals="4" coveredconditionals="4" methods="14" coveredmethods="11"/>
         <line num="6" count="2" type="stmt"/>
@@ -55,88 +55,6 @@
         <line num="253" count="0" type="stmt"/>
         <line num="267" count="0" type="stmt"/>
         <line num="287" count="0" type="stmt"/>
-      </file>
-      <file name="simple-calc-worker.ts" path="/Users/super/Documents/GitHub/hyperviz/packages/worker/src/core/simple-calc-worker.ts">
-        <metrics statements="79" coveredstatements="0" conditionals="44" coveredconditionals="0" methods="16" coveredmethods="0"/>
-        <line num="8" count="0" type="stmt"/>
-        <line num="9" count="0" type="stmt"/>
-        <line num="10" count="0" type="stmt"/>
-        <line num="14" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="25" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="26" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="27" count="0" type="stmt"/>
-        <line num="36" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="37" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="38" count="0" type="stmt"/>
-        <line num="46" count="0" type="stmt"/>
-        <line num="64" count="0" type="stmt"/>
-        <line num="65" count="0" type="stmt"/>
-        <line num="67" count="0" type="stmt"/>
-        <line num="84" count="0" type="stmt"/>
-        <line num="86" count="0" type="cond" truecount="0" falsecount="3"/>
-        <line num="87" count="0" type="stmt"/>
-        <line num="88" count="0" type="stmt"/>
-        <line num="92" count="0" type="cond" truecount="0" falsecount="3"/>
-        <line num="93" count="0" type="stmt"/>
-        <line num="94" count="0" type="stmt"/>
-        <line num="97" count="0" type="stmt"/>
-        <line num="98" count="0" type="stmt"/>
-        <line num="101" count="0" type="stmt"/>
-        <line num="102" count="0" type="stmt"/>
-        <line num="108" count="0" type="cond" truecount="0" falsecount="4"/>
-        <line num="110" count="0" type="stmt"/>
-        <line num="111" count="0" type="stmt"/>
-        <line num="113" count="0" type="stmt"/>
-        <line num="114" count="0" type="stmt"/>
-        <line num="116" count="0" type="stmt"/>
-        <line num="117" count="0" type="stmt"/>
-        <line num="119" count="0" type="stmt"/>
-        <line num="123" count="0" type="stmt"/>
-        <line num="124" count="0" type="stmt"/>
-        <line num="126" count="0" type="stmt"/>
-        <line num="131" count="0" type="stmt"/>
-        <line num="138" count="0" type="cond" truecount="0" falsecount="3"/>
-        <line num="148" count="0" type="cond" truecount="0" falsecount="1"/>
-        <line num="151" count="0" type="cond" truecount="0" falsecount="1"/>
-        <line num="152" count="0" type="stmt"/>
-        <line num="155" count="0" type="stmt"/>
-        <line num="168" count="0" type="cond" truecount="0" falsecount="1"/>
-        <line num="171" count="0" type="cond" truecount="0" falsecount="1"/>
-        <line num="172" count="0" type="stmt"/>
-        <line num="175" count="0" type="stmt"/>
-        <line num="188" count="0" type="cond" truecount="0" falsecount="1"/>
-        <line num="191" count="0" type="cond" truecount="0" falsecount="3"/>
-        <line num="192" count="0" type="stmt"/>
-        <line num="196" count="0" type="stmt"/>
-        <line num="199" count="0" type="cond" truecount="0" falsecount="1"/>
-        <line num="200" count="0" type="stmt"/>
-        <line num="204" count="0" type="stmt"/>
-        <line num="205" count="0" type="stmt"/>
-        <line num="206" count="0" type="stmt"/>
-        <line num="209" count="0" type="cond" truecount="0" falsecount="3"/>
-        <line num="210" count="0" type="stmt"/>
-        <line num="211" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="212" count="0" type="stmt"/>
-        <line num="221" count="0" type="cond" truecount="0" falsecount="1"/>
-        <line num="222" count="0" type="stmt"/>
-        <line num="235" count="0" type="cond" truecount="0" falsecount="1"/>
-        <line num="236" count="0" type="stmt"/>
-        <line num="240" count="0" type="stmt"/>
-        <line num="249" count="0" type="cond" truecount="0" falsecount="2"/>
-        <line num="251" count="0" type="stmt"/>
-        <line num="254" count="0" type="stmt"/>
-        <line num="255" count="0" type="stmt"/>
-        <line num="258" count="0" type="stmt"/>
-        <line num="260" count="0" type="stmt"/>
-        <line num="261" count="0" type="stmt"/>
-        <line num="262" count="0" type="stmt"/>
-        <line num="264" count="0" type="stmt"/>
-        <line num="267" count="0" type="cond" truecount="0" falsecount="1"/>
-        <line num="268" count="0" type="stmt"/>
-        <line num="269" count="0" type="stmt"/>
-        <line num="270" count="0" type="stmt"/>
-        <line num="275" count="0" type="stmt"/>
-        <line num="280" count="0" type="stmt"/>
       </file>
       <file name="task-queue.ts" path="/Users/super/Documents/GitHub/hyperviz/packages/worker/src/core/task-queue.ts">
         <metrics statements="19" coveredstatements="19" conditionals="5" coveredconditionals="3" methods="11" coveredmethods="11"/>
