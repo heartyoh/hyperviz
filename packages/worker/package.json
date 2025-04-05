@@ -36,5 +36,6 @@
   },
   "dependencies": {
     "eventemitter3": "^5.0.0"
-  }
+  },
+  "gitHead": "49ddba6aac8ac51c613f8601ff53410fb455fc14"
 }
