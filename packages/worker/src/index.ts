@@ -16,12 +16,19 @@ export {
   errorToString,
 } from "./core/utils.js";
 
-// 코어 모듈 내보내기
-export * from "./core/worker-adapter.js";
-export * from "./types/index.js";
-
 // 이미지 처리 모듈 내보내기
 export * from "./imaging/image-processor.js";
-export * from "./imaging/types.js";
 export * from "./imaging/scaling-algorithms.js";
 export * from "./imaging/image-cache.js";
+
+// OffscreenCanvas 모듈 내보내기
+export {
+  CanvasContextType,
+  CanvasCommandType,
+  Canvas2DCommandType,
+  CanvasWebGLCommandType,
+  ShapeType,
+  CanvasEventType,
+} from "./offcanvas/types.js";
+
+export { OffscreenCanvasManager } from "./offcanvas/canvas-manager.js";
