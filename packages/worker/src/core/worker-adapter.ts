@@ -6,6 +6,7 @@ import {
   Task,
 } from "../types/index.js";
 import { IWorker } from "../types/interfaces.js";
+import { StreamMessageType } from "../types/stream.js";
 
 // 웹 환경 여부 확인
 const isWeb = typeof window !== "undefined" && typeof Worker !== "undefined";
@@ -435,3 +436,98 @@ export class WorkerAdapter extends EventEmitter implements IWorker {
     );
   }
 }
+
+/**
+ * 워커 스크립트에 추가할 이벤트 스트림 처리 코드
+ */
+export const streamHandlerCode = `
+// 활성 스트림 관리
+const activeStreams = new Set();
+
+// 스트림 처리 핸들러
+function handleStreamMessage(message) {
+  const { type, streamId, data } = message;
+  
+  if (!type || !streamId) return;
+  
+  switch (type) {
+    case "${StreamMessageType.INIT}":
+      // 스트림 초기화
+      activeStreams.add(streamId);
+      
+      // 준비 완료 메시지 응답
+      self.postMessage({
+        type: "${StreamMessageType.READY}",
+        streamId,
+        timestamp: Date.now()
+      });
+      break;
+      
+    case "${StreamMessageType.MESSAGE}":
+      // 스트림 활성 확인
+      if (activeStreams.has(streamId)) {
+        // 데이터 처리 및 응답
+        // 실제 구현에서는 데이터 처리 로직 추가
+        self.postMessage({
+          type: "${StreamMessageType.MESSAGE}",
+          streamId,
+          data: data, // 처리된 데이터 반환
+          timestamp: Date.now()
+        });
+      }
+      break;
+      
+    case "${StreamMessageType.PAUSE}":
+      // 스트림 일시 중지 처리
+      if (activeStreams.has(streamId)) {
+        // 일시 중지 확인 응답
+        self.postMessage({
+          type: "${StreamMessageType.PAUSE}",
+          streamId,
+          timestamp: Date.now()
+        });
+      }
+      break;
+      
+    case "${StreamMessageType.RESUME}":
+      // 스트림 재개 처리
+      if (activeStreams.has(streamId)) {
+        // 재개 확인 응답
+        self.postMessage({
+          type: "${StreamMessageType.RESUME}",
+          streamId,
+          timestamp: Date.now()
+        });
+      }
+      break;
+      
+    case "${StreamMessageType.CLOSE}":
+      // 스트림 종료
+      activeStreams.delete(streamId);
+      break;
+  }
+}
+
+// 기존 메시지 핸들러 확장
+const originalMessageHandler = self.onmessage;
+
+self.onmessage = function(event) {
+  const message = event.data;
+  
+  // 스트림 메시지 처리
+  if (
+    message && 
+    typeof message === 'object' && 
+    message.type && 
+    message.type.startsWith('STREAM_')
+  ) {
+    handleStreamMessage(message);
+    return;
+  }
+  
+  // 기존 메시지 핸들러 호출
+  if (originalMessageHandler) {
+    originalMessageHandler.call(self, event);
+  }
+};
+`;

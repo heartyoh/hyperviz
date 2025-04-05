@@ -16,6 +16,9 @@ import { WorkerManager } from "./worker-manager.js";
 import { EventHub, TaskEventType, WorkerEventType } from "./event-hub.js";
 import { logger } from "../utils/logger.js";
 import { generateId } from "./utils.js";
+import { StreamManager } from "./stream-manager.js";
+import { EventStream } from "./event-stream.js";
+import { StreamOptions } from "../types/stream.js";
 
 /**
  * WorkerPool 설정 인터페이스
@@ -137,6 +140,9 @@ export class WorkerPool extends EventEmitter {
   /** 워커 풀이 종료되었는지 여부 */
   private isShutdown: boolean = false;
 
+  /** 스트림 매니저 */
+  private streamManager: StreamManager;
+
   /**
    * WorkerPool 생성자
    * @param config 워커 풀 설정
@@ -178,6 +184,9 @@ export class WorkerPool extends EventEmitter {
 
     // 통계 업데이트 시작
     this.startStatsUpdates();
+
+    // 스트림 매니저 초기화
+    this.streamManager = new StreamManager(this.sendMessageToWorker.bind(this));
 
     if (this.config.enableLogging) {
       logger.info(
@@ -423,6 +432,30 @@ export class WorkerPool extends EventEmitter {
   }
 
   /**
+   * 워커에 메시지 전송
+   * @param workerId 워커 ID
+   * @param message 메시지
+   */
+  private async sendMessageToWorker(
+    workerId: string,
+    message: any
+  ): Promise<void> {
+    const worker = this.workerManager.getWorker(workerId);
+    if (!worker) {
+      throw new Error(`Worker ${workerId} not found`);
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      try {
+        worker.postMessage(message);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  /**
    * 워커 메시지 처리
    * @param workerId 워커 ID
    * @param message 메시지
@@ -431,6 +464,13 @@ export class WorkerPool extends EventEmitter {
     if (!message || !message.type) return;
 
     try {
+      // 스트림 메시지 처리
+      if (message.type.startsWith("STREAM_")) {
+        this.streamManager.handleWorkerMessage(workerId, message);
+        return;
+      }
+
+      // 기존 메시지 처리 로직
       switch (message.type) {
         case "taskProgress":
           if (message.taskId && message.progress) {
@@ -877,6 +917,20 @@ export class WorkerPool extends EventEmitter {
   }
 
   /**
+   * 이벤트 스트림 생성
+   * @param options 스트림 옵션
+   */
+  public createEventStream<T = any>(
+    options: StreamOptions = {}
+  ): EventStream<T> {
+    if (this.isShutdown) {
+      throw new Error("Worker pool has been shut down");
+    }
+
+    return this.streamManager.createStream<T>(options);
+  }
+
+  /**
    * 워커 풀 종료
    * @param force 강제 종료 여부
    */
@@ -903,6 +957,9 @@ export class WorkerPool extends EventEmitter {
 
       // 모든 참조 정리
       this._clearReferences();
+
+      // 모든 스트림 닫기
+      this.streamManager.closeAllStreams();
 
       if (!force) {
         // 대기 중인 태스크 취소
@@ -963,5 +1020,12 @@ export class WorkerPool extends EventEmitter {
    */
   private _clearReferences(): void {
     // 주요 객체 참조 정리
+  }
+
+  /**
+   * 활성 스트림 수 가져오기
+   */
+  public getActiveStreamCount(): number {
+    return this.streamManager.getActiveStreamCount();
   }
 }

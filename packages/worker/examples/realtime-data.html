@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>실시간 데이터 처리 예제</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background-color: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+      }
+      .chart-container {
+        height: 400px;
+        position: relative;
+        margin: 20px 0;
+      }
+      canvas {
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .controls {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        background-color: #3498db;
+        color: white;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: background-color 0.2s;
+      }
+      button:hover {
+        background-color: #2980b9;
+      }
+      button:disabled {
+        background-color: #95a5a6;
+        cursor: not-allowed;
+      }
+      .stats {
+        display: flex;
+        justify-content: space-between;
+        color: #666;
+        margin-top: 10px;
+      }
+      .data-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 10px;
+        margin-top: 20px;
+      }
+      .data-card {
+        background-color: #f9f9f9;
+        border-radius: 4px;
+        padding: 10px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      .data-card h3 {
+        margin-top: 0;
+        color: #333;
+        font-size: 1rem;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 5px;
+      }
+      .data-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #2c3e50;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .slider-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+      }
+      label {
+        min-width: 100px;
+      }
+      input[type="range"] {
+        flex: 1;
+      }
+      .value {
+        min-width: 50px;
+        text-align: right;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>실시간 데이터 처리 예제</h1>
+
+      <div class="row">
+        <label for="data-points">데이터 포인트:</label>
+        <div class="slider-group">
+          <input
+            type="range"
+            id="data-points"
+            min="10"
+            max="1000"
+            value="100"
+          />
+          <span class="value" id="data-points-value">100</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <label for="noise-level">노이즈 수준:</label>
+        <div class="slider-group">
+          <input type="range" id="noise-level" min="0" max="50" value="10" />
+          <span class="value" id="noise-level-value">10%</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <label for="update-rate">업데이트 간격:</label>
+        <div class="slider-group">
+          <input
+            type="range"
+            id="update-rate"
+            min="10"
+            max="1000"
+            value="100"
+          />
+          <span class="value" id="update-rate-value">100ms</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="start">시작</button>
+        <button id="stop" disabled>중지</button>
+      </div>
+
+      <div class="chart-container">
+        <canvas id="chart"></canvas>
+      </div>
+
+      <div class="data-info">
+        <div class="data-card">
+          <h3>최소값</h3>
+          <div class="data-value" id="min-value">-</div>
+        </div>
+        <div class="data-card">
+          <h3>최대값</h3>
+          <div class="data-value" id="max-value">-</div>
+        </div>
+        <div class="data-card">
+          <h3>평균값</h3>
+          <div class="data-value" id="avg-value">-</div>
+        </div>
+        <div class="data-card">
+          <h3>처리 속도</h3>
+          <div class="data-value" id="process-speed">-</div>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div id="status">상태: 대기 중</div>
+        <div id="memory-usage">메모리 사용량: -</div>
+      </div>
+    </div>
+
+    <script type="module">
+      // Worker 코드를 문자열로 정의
+      const workerCode = `
+      // 데이터 및 설정
+      let dataPoints = 100;
+      let noiseLevel = 10;
+      let updateInterval = 100;
+      
+      // 데이터 시리즈
+      let dataSeries = [];
+      
+      // 통계
+      let stats = {
+        min: 0,
+        max: 0,
+        avg: 0,
+        processTime: 0
+      };
+      
+      // 타이머
+      let updateTimer = null;
+      
+      // 스트림 관리
+      const activeStreams = new Set();
+      
+      // 데이터 초기화
+      function initializeData() {
+        // 데이터 배열 생성
+        dataSeries = [];
+        for (let i = 0; i < dataPoints; i++) {
+          // 사인파에 노이즈 추가
+          const x = i / dataPoints * Math.PI * 4;
+          const baseValue = Math.sin(x) * 100;
+          const noise = (Math.random() * 2 - 1) * noiseLevel;
+          dataSeries.push(baseValue + noise);
+        }
+        
+        // 통계 계산
+        calculateStats();
+      }
+      
+      // 통계 계산
+      function calculateStats() {
+        const startTime = performance.now();
+        
+        // 최소값, 최대값, 평균
+        let min = Number.MAX_VALUE;
+        let max = Number.MIN_VALUE;
+        let sum = 0;
+        
+        for (let i = 0; i < dataSeries.length; i++) {
+          const value = dataSeries[i];
+          min = Math.min(min, value);
+          max = Math.max(max, value);
+          sum += value;
+        }
+        
+        const avg = sum / dataSeries.length;
+        
+        // 처리 시간
+        const endTime = performance.now();
+        const processTime = endTime - startTime;
+        
+        // 통계 업데이트
+        stats = {
+          min: min.toFixed(2),
+          max: max.toFixed(2),
+          avg: avg.toFixed(2),
+          processTime: processTime.toFixed(2)
+        };
+      }
+      
+      // 데이터 업데이트
+      function updateData() {
+        // 새 데이터 포인트 생성
+        const newPoint = Math.sin(Date.now() / 1000) * 100 + (Math.random() * 2 - 1) * noiseLevel;
+        
+        // 첫 데이터 제거하고 새 데이터 추가
+        dataSeries.shift();
+        dataSeries.push(newPoint);
+        
+        // 통계 계산
+        calculateStats();
+        
+        // 모든 활성 스트림에 데이터 전송
+        for (const streamId of activeStreams) {
+          self.postMessage({
+            type: 'STREAM_MESSAGE',
+            streamId,
+            data: {
+              series: dataSeries,
+              stats: stats
+            },
+            timestamp: Date.now()
+          });
+        }
+      }
+      
+      // 업데이트 시작
+      function startUpdates() {
+        if (updateTimer) return;
+        
+        updateTimer = setInterval(updateData, updateInterval);
+      }
+      
+      // 업데이트 중지
+      function stopUpdates() {
+        if (updateTimer) {
+          clearInterval(updateTimer);
+          updateTimer = null;
+        }
+      }
+      
+      // 설정 업데이트
+      function updateSettings(settings) {
+        // 중지 후 설정 업데이트
+        const wasRunning = !!updateTimer;
+        stopUpdates();
+        
+        // 파라미터 업데이트
+        if (settings.dataPoints !== undefined) {
+          dataPoints = settings.dataPoints;
+        }
+        
+        if (settings.noiseLevel !== undefined) {
+          noiseLevel = settings.noiseLevel;
+        }
+        
+        if (settings.updateInterval !== undefined) {
+          updateInterval = settings.updateInterval;
+        }
+        
+        // 데이터 재초기화
+        initializeData();
+        
+        // 이전에 실행 중이었다면 재시작
+        if (wasRunning) {
+          startUpdates();
+        }
+      }
+      
+      // 메모리 사용량 추정
+      function getMemoryUsage() {
+        let usage = 0;
+        
+        // 데이터 시리즈 (8바이트 * 길이)
+        usage += dataSeries.length * 8;
+        
+        // 기타 변수 및 상태
+        usage += 1000; // 예상 오버헤드
+        
+        return usage;
+      }
+      
+      // 메시지 핸들러
+      self.onmessage = function(event) {
+        const message = event.data;
+        
+        // 스트림 메시지 처리
+        if (message.type && message.type.startsWith('STREAM_')) {
+          const { type, streamId, data } = message;
+          
+          if (type === 'STREAM_INIT') {
+            // 스트림 초기화
+            activeStreams.add(streamId);
+            
+            // 설정 적용
+            if (data && data.settings) {
+              updateSettings(data.settings);
+            } else {
+              // 기본 데이터 초기화
+              initializeData();
+            }
+            
+            // 준비 완료 응답
+            self.postMessage({
+              type: 'STREAM_READY',
+              streamId,
+              data: {
+                series: dataSeries,
+                stats: stats,
+                memoryUsage: getMemoryUsage()
+              },
+              timestamp: Date.now()
+            });
+          }
+          else if (type === 'STREAM_MESSAGE' && activeStreams.has(streamId)) {
+            // 명령 처리
+            if (data && data.action) {
+              switch (data.action) {
+                case 'start':
+                  startUpdates();
+                  break;
+                  
+                case 'stop':
+                  stopUpdates();
+                  break;
+                  
+                case 'updateSettings':
+                  updateSettings(data.settings || {});
+                  break;
+                  
+                case 'getStats':
+                  // 현재 통계 전송
+                  self.postMessage({
+                    type: 'STREAM_MESSAGE',
+                    streamId,
+                    data: {
+                      series: dataSeries,
+                      stats: stats,
+                      memoryUsage: getMemoryUsage()
+                    },
+                    timestamp: Date.now()
+                  });
+                  break;
+              }
+            }
+          }
+          else if (type === 'STREAM_CLOSE') {
+            // 스트림 종료
+            activeStreams.delete(streamId);
+            
+            // 모든 스트림이 종료되면 업데이트 중지
+            if (activeStreams.size === 0) {
+              stopUpdates();
+            }
+          }
+        }
+      };
+    `;
+
+      // UI 요소 참조
+      const canvas = document.getElementById("chart");
+      const dataPointsInput = document.getElementById("data-points");
+      const dataPointsValue = document.getElementById("data-points-value");
+      const noiseLevelInput = document.getElementById("noise-level");
+      const noiseLevelValue = document.getElementById("noise-level-value");
+      const updateRateInput = document.getElementById("update-rate");
+      const updateRateValue = document.getElementById("update-rate-value");
+      const startButton = document.getElementById("start");
+      const stopButton = document.getElementById("stop");
+      const minValue = document.getElementById("min-value");
+      const maxValue = document.getElementById("max-value");
+      const avgValue = document.getElementById("avg-value");
+      const processSpeed = document.getElementById("process-speed");
+      const statusElement = document.getElementById("status");
+      const memoryUsage = document.getElementById("memory-usage");
+
+      // 상태 변수
+      let isActive = false;
+      let streamId = null;
+      let worker = null;
+      let isRunning = false;
+      let animationFrameId = null;
+
+      // 설정
+      let settings = {
+        dataPoints: parseInt(dataPointsInput.value, 10),
+        noiseLevel: parseInt(noiseLevelInput.value, 10),
+        updateInterval: parseInt(updateRateInput.value, 10),
+      };
+
+      // 차트 설정
+      const chartContext = canvas.getContext("2d");
+      let chartData = [];
+
+      // 설정 입력 이벤트
+      dataPointsInput.addEventListener("input", () => {
+        const value = parseInt(dataPointsInput.value, 10);
+        dataPointsValue.textContent = value;
+        settings.dataPoints = value;
+
+        if (isActive) {
+          sendCommand({
+            action: "updateSettings",
+            settings: { dataPoints: value },
+          });
+        }
+      });
+
+      noiseLevelInput.addEventListener("input", () => {
+        const value = parseInt(noiseLevelInput.value, 10);
+        noiseLevelValue.textContent = `${value}%`;
+        settings.noiseLevel = value;
+
+        if (isActive) {
+          sendCommand({
+            action: "updateSettings",
+            settings: { noiseLevel: value },
+          });
+        }
+      });
+
+      updateRateInput.addEventListener("input", () => {
+        const value = parseInt(updateRateInput.value, 10);
+        updateRateValue.textContent = `${value}ms`;
+        settings.updateInterval = value;
+
+        if (isActive) {
+          sendCommand({
+            action: "updateSettings",
+            settings: { updateInterval: value },
+          });
+        }
+      });
+
+      // 시작 버튼 이벤트
+      startButton.addEventListener("click", () => {
+        if (!isActive) {
+          initializeWorker();
+        } else if (!isRunning) {
+          startDataStream();
+        }
+      });
+
+      // 중지 버튼 이벤트
+      stopButton.addEventListener("click", () => {
+        if (isActive && isRunning) {
+          stopDataStream();
+        }
+      });
+
+      // Worker 초기화
+      function initializeWorker() {
+        // 기존 Worker 종료
+        if (worker) {
+          terminateWorker();
+        }
+
+        // Blob URL 생성
+        const workerBlob = new Blob([workerCode], {
+          type: "application/javascript",
+        });
+        const workerURL = URL.createObjectURL(workerBlob);
+
+        // Worker 생성
+        worker = new Worker(workerURL);
+
+        // Worker 메시지 이벤트
+        worker.addEventListener("message", handleWorkerMessage);
+
+        // 스트림 ID 생성
+        streamId = "stream-" + Date.now();
+
+        // 초기화 메시지 전송
+        worker.postMessage({
+          type: "STREAM_INIT",
+          streamId,
+          data: {
+            settings: {
+              dataPoints: settings.dataPoints,
+              noiseLevel: settings.noiseLevel,
+              updateInterval: settings.updateInterval,
+            },
+          },
+          timestamp: Date.now(),
+        });
+
+        // 상태 업데이트
+        statusElement.textContent = "상태: 초기화 중...";
+
+        // URL 객체 해제
+        URL.revokeObjectURL(workerURL);
+      }
+
+      // Worker 메시지 핸들러
+      function handleWorkerMessage(event) {
+        const message = event.data;
+
+        // 스트림 메시지 처리
+        if (message.type === "STREAM_READY") {
+          // 스트림 준비 완료
+          isActive = true;
+
+          // 데이터 업데이트
+          updateChartData(message.data.series);
+          updateStats(message.data.stats);
+          updateMemoryUsage(message.data.memoryUsage);
+
+          // 상태 업데이트
+          statusElement.textContent = "상태: 준비됨";
+
+          // 버튼 상태 변경
+          startButton.textContent = "실행";
+          startButton.disabled = false;
+
+          // 차트 그리기
+          drawChart();
+        } else if (message.type === "STREAM_MESSAGE") {
+          // 데이터 업데이트
+          if (message.data) {
+            updateChartData(message.data.series);
+            updateStats(message.data.stats);
+
+            if (message.data.memoryUsage) {
+              updateMemoryUsage(message.data.memoryUsage);
+            }
+          }
+        }
+      }
+
+      // 차트 데이터 업데이트
+      function updateChartData(data) {
+        if (Array.isArray(data)) {
+          chartData = data;
+        }
+      }
+
+      // 통계 업데이트
+      function updateStats(stats) {
+        if (!stats) return;
+
+        minValue.textContent = stats.min || "-";
+        maxValue.textContent = stats.max || "-";
+        avgValue.textContent = stats.avg || "-";
+        processSpeed.textContent = stats.processTime
+          ? `${stats.processTime}ms`
+          : "-";
+      }
+
+      // 메모리 사용량 업데이트
+      function updateMemoryUsage(bytes) {
+        if (typeof bytes !== "number") return;
+
+        let size;
+        if (bytes < 1024) {
+          size = `${bytes} Bytes`;
+        } else if (bytes < 1024 * 1024) {
+          size = `${(bytes / 1024).toFixed(2)} KB`;
+        } else {
+          size = `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+        }
+
+        memoryUsage.textContent = `메모리 사용량: ${size}`;
+      }
+
+      // 차트 그리기
+      function drawChart() {
+        if (!chartData || chartData.length === 0) return;
+
+        // 캔버스 크기 설정
+        const parentWidth = canvas.parentElement.clientWidth;
+        const parentHeight = canvas.parentElement.clientHeight;
+
+        canvas.width = parentWidth;
+        canvas.height = parentHeight;
+
+        // 여백 설정
+        const padding = 30;
+        const chartWidth = canvas.width - padding * 2;
+        const chartHeight = canvas.height - padding * 2;
+
+        // 배경 지우기
+        chartContext.fillStyle = "white";
+        chartContext.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 데이터 범위 계산
+        let minData = Math.min(...chartData);
+        let maxData = Math.max(...chartData);
+
+        // 범위 여유분 추가
+        const range = maxData - minData;
+        minData -= range * 0.1;
+        maxData += range * 0.1;
+
+        // 축 그리기
+        chartContext.strokeStyle = "#ddd";
+        chartContext.lineWidth = 1;
+
+        // X축
+        chartContext.beginPath();
+        chartContext.moveTo(padding, canvas.height - padding);
+        chartContext.lineTo(canvas.width - padding, canvas.height - padding);
+        chartContext.stroke();
+
+        // Y축
+        chartContext.beginPath();
+        chartContext.moveTo(padding, padding);
+        chartContext.lineTo(padding, canvas.height - padding);
+        chartContext.stroke();
+
+        // 그리드 그리기
+        const gridCount = 5;
+
+        chartContext.strokeStyle = "#eee";
+        chartContext.lineWidth = 1;
+
+        // 가로 그리드
+        for (let i = 1; i < gridCount; i++) {
+          const y = padding + chartHeight * (i / gridCount);
+
+          chartContext.beginPath();
+          chartContext.moveTo(padding, y);
+          chartContext.lineTo(canvas.width - padding, y);
+          chartContext.stroke();
+
+          // 레이블
+          const value = maxData - (maxData - minData) * (i / gridCount);
+          chartContext.fillStyle = "#666";
+          chartContext.font = "10px Arial";
+          chartContext.textAlign = "right";
+          chartContext.textBaseline = "middle";
+          chartContext.fillText(value.toFixed(1), padding - 5, y);
+        }
+
+        // 세로 그리드
+        for (let i = 1; i < gridCount; i++) {
+          const x = padding + chartWidth * (i / gridCount);
+
+          chartContext.beginPath();
+          chartContext.moveTo(x, padding);
+          chartContext.lineTo(x, canvas.height - padding);
+          chartContext.stroke();
+        }
+
+        // 데이터 선 그리기
+        chartContext.strokeStyle = "#3498db";
+        chartContext.lineWidth = 2;
+        chartContext.beginPath();
+
+        // 첫 점 이동
+        const xScale = chartWidth / (chartData.length - 1);
+        const yScale = chartHeight / (maxData - minData);
+
+        // 첫 점 이동
+        const x0 = padding;
+        const y0 = canvas.height - padding - (chartData[0] - minData) * yScale;
+        chartContext.moveTo(x0, y0);
+
+        // 나머지 점 연결
+        for (let i = 1; i < chartData.length; i++) {
+          const x = padding + i * xScale;
+          const y = canvas.height - padding - (chartData[i] - minData) * yScale;
+          chartContext.lineTo(x, y);
+        }
+
+        chartContext.stroke();
+
+        // 애니메이션 프레임 요청
+        if (isRunning) {
+          animationFrameId = requestAnimationFrame(drawChart);
+        }
+      }
+
+      // 데이터 스트림 시작
+      function startDataStream() {
+        if (!isActive || isRunning) return;
+
+        sendCommand({
+          action: "start",
+        });
+
+        isRunning = true;
+        statusElement.textContent = "상태: 실행 중";
+
+        // 버튼 상태 변경
+        startButton.disabled = true;
+        stopButton.disabled = false;
+
+        // 애니메이션 시작
+        animationFrameId = requestAnimationFrame(drawChart);
+      }
+
+      // 데이터 스트림 중지
+      function stopDataStream() {
+        if (!isActive || !isRunning) return;
+
+        sendCommand({
+          action: "stop",
+        });
+
+        isRunning = false;
+        statusElement.textContent = "상태: 중지됨";
+
+        // 버튼 상태 변경
+        startButton.disabled = false;
+        startButton.textContent = "실행";
+        stopButton.disabled = true;
+
+        // 애니메이션 중지
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+        }
+      }
+
+      // 명령 전송
+      function sendCommand(data) {
+        if (!isActive || !worker || !streamId) return;
+
+        worker.postMessage({
+          type: "STREAM_MESSAGE",
+          streamId,
+          data,
+          timestamp: Date.now(),
+        });
+      }
+
+      // Worker 종료
+      function terminateWorker() {
+        // 스트림 종료
+        if (worker && streamId) {
+          worker.postMessage({
+            type: "STREAM_CLOSE",
+            streamId,
+            timestamp: Date.now(),
+          });
+        }
+
+        // Worker 종료
+        if (worker) {
+          worker.terminate();
+          worker = null;
+        }
+
+        // 애니메이션 중지
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+        }
+
+        // 상태 초기화
+        isActive = false;
+        isRunning = false;
+        streamId = null;
+
+        // 버튼 상태 변경
+        startButton.disabled = false;
+        startButton.textContent = "시작";
+        stopButton.disabled = true;
+        statusElement.textContent = "상태: 대기 중";
+      }
+
+      // 차트 초기 크기 설정
+      function setupCanvas() {
+        const parentWidth = canvas.parentElement.clientWidth;
+        const parentHeight = canvas.parentElement.clientHeight;
+
+        canvas.width = parentWidth;
+        canvas.height = parentHeight;
+
+        // 배경 색상
+        chartContext.fillStyle = "white";
+        chartContext.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 안내 텍스트
+        chartContext.fillStyle = "#999";
+        chartContext.font = "16px Arial";
+        chartContext.textAlign = "center";
+        chartContext.textBaseline = "middle";
+        chartContext.fillText(
+          "시작 버튼을 클릭하여 데이터 처리를 시작하세요",
+          canvas.width / 2,
+          canvas.height / 2
+        );
+      }
+
+      // 창 크기 변경 이벤트
+      window.addEventListener("resize", () => {
+        setupCanvas();
+        if (chartData.length > 0) {
+          drawChart();
+        }
+      });
+
+      // 페이지 종료 시 정리
+      window.addEventListener("beforeunload", () => {
+        terminateWorker();
+      });
+
+      // 초기 설정
+      setupCanvas();
+    </script>
+  </body>
+</html>

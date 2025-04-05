@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>오프캔버스 드로잉 예제</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background-color: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+      }
+      .canvas-container {
+        display: flex;
+        justify-content: center;
+        margin: 20px 0;
+      }
+      canvas {
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        touch-action: none;
+      }
+      .tools {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        background-color: #3498db;
+        color: white;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: background-color 0.2s;
+      }
+      button:hover {
+        background-color: #2980b9;
+      }
+      button:disabled {
+        background-color: #95a5a6;
+        cursor: not-allowed;
+      }
+      input[type="color"] {
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      input[type="range"] {
+        width: 120px;
+      }
+      .stats {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.8rem;
+        color: #7f8c8d;
+        margin-top: 10px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      label {
+        min-width: 60px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>오프캔버스 드로잉 예제</h1>
+
+      <div class="row">
+        <label for="color">색상:</label>
+        <input type="color" id="color" value="#000000" />
+
+        <label for="size">크기:</label>
+        <input type="range" id="size" min="1" max="50" value="5" />
+        <span id="size-value">5px</span>
+      </div>
+
+      <div class="tools">
+        <button id="clear">모두 지우기</button>
+        <button id="undo" disabled>실행 취소</button>
+        <button id="start">시작</button>
+        <button id="stop" disabled>중지</button>
+      </div>
+
+      <div class="canvas-container">
+        <canvas id="canvas" width="800" height="600"></canvas>
+      </div>
+
+      <div class="stats">
+        <div id="status">상태: 준비</div>
+        <div id="fps">FPS: -</div>
+      </div>
+    </div>
+
+    <script type="module">
+      // Worker 코드를 문자열로 정의
+      const workerCode = `
+      // 캔버스 및 컨텍스트
+      let canvas;
+      let ctx;
+      
+      // 드로잉 이력
+      const history = [];
+      const maxHistory = 50;
+      
+      // 현재 경로
+      let currentPath = [];
+      
+      // 드로잉 상태
+      let isDrawing = false;
+      
+      // 드로잉 설정
+      let settings = {
+        color: '#000000',
+        size: 5
+      };
+      
+      // 스트림 관리
+      const activeStreams = new Set();
+      
+      // 오프스크린 캔버스 설정
+      function setupCanvas(offscreenCanvas) {
+        canvas = offscreenCanvas;
+        ctx = canvas.getContext('2d');
+        
+        // 캔버스 초기화
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // 기본 스타일 설정
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        updateStyle();
+      }
+      
+      // 스타일 업데이트
+      function updateStyle() {
+        ctx.strokeStyle = settings.color;
+        ctx.lineWidth = settings.size;
+      }
+      
+      // 그리기 시작
+      function startDrawing(x, y) {
+        isDrawing = true;
+        currentPath = [{ x, y }];
+        
+        // 새 경로 시작
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+      }
+      
+      // 그리기 계속
+      function continueDrawing(x, y) {
+        if (!isDrawing) return;
+        
+        // 포인트 추가
+        currentPath.push({ x, y });
+        
+        // 선 그리기
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      }
+      
+      // 그리기 종료
+      function endDrawing() {
+        if (!isDrawing) return;
+        
+        isDrawing = false;
+        
+        // 이력에 추가
+        if (currentPath.length > 1) {
+          const pathEntry = {
+            type: 'path',
+            points: currentPath,
+            color: settings.color,
+            size: settings.size
+          };
+          
+          history.push(pathEntry);
+          
+          // 이력 제한
+          while (history.length > maxHistory) {
+            history.shift();
+          }
+        }
+        
+        currentPath = [];
+      }
+      
+      // 모두 지우기
+      function clearCanvas() {
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // 이력에 추가
+        history.push({
+          type: 'clear'
+        });
+        
+        // 이력 제한
+        while (history.length > maxHistory) {
+          history.shift();
+        }
+      }
+      
+      // 실행 취소
+      function undoLastAction() {
+        if (history.length === 0) return;
+        
+        // 마지막 액션 제거
+        history.pop();
+        
+        // 캔버스 초기화
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // 이력 다시 그리기
+        for (const entry of history) {
+          if (entry.type === 'clear') {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          } else if (entry.type === 'path') {
+            const { points, color, size } = entry;
+            
+            // 스타일 설정
+            ctx.strokeStyle = color;
+            ctx.lineWidth = size;
+            
+            // 경로 그리기
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            
+            for (let i = 1; i < points.length; i++) {
+              ctx.lineTo(points[i].x, points[i].y);
+            }
+            
+            ctx.stroke();
+          }
+        }
+        
+        // 현재 스타일 복원
+        updateStyle();
+      }
+      
+      // 메시지 핸들러
+      self.onmessage = function(event) {
+        const message = event.data;
+        
+        // 오프스크린 캔버스 설정
+        if (message.type === 'init') {
+          setupCanvas(message.canvas);
+          
+          // 초기화 완료 응답
+          self.postMessage({
+            type: 'initialized'
+          });
+          
+          return;
+        }
+        
+        // 스트림 메시지 처리
+        if (message.type && message.type.startsWith('STREAM_')) {
+          const { type, streamId, data } = message;
+          
+          if (type === 'STREAM_INIT') {
+            // 스트림 초기화
+            activeStreams.add(streamId);
+            
+            // 준비 완료 응답
+            self.postMessage({
+              type: 'STREAM_READY',
+              streamId,
+              timestamp: Date.now()
+            });
+          }
+          else if (type === 'STREAM_MESSAGE' && activeStreams.has(streamId)) {
+            // 명령 처리
+            if (data && data.action) {
+              switch (data.action) {
+                case 'updateStyle':
+                  if (data.color) settings.color = data.color;
+                  if (data.size) settings.size = data.size;
+                  updateStyle();
+                  break;
+                  
+                case 'startDrawing':
+                  startDrawing(data.x, data.y);
+                  break;
+                  
+                case 'continueDrawing':
+                  continueDrawing(data.x, data.y);
+                  break;
+                  
+                case 'endDrawing':
+                  endDrawing();
+                  break;
+                  
+                case 'clear':
+                  clearCanvas();
+                  break;
+                  
+                case 'undo':
+                  undoLastAction();
+                  break;
+              }
+              
+              // 상태 응답
+              self.postMessage({
+                type: 'STREAM_MESSAGE',
+                streamId,
+                data: {
+                  historyLength: history.length,
+                  action: data.action,
+                  timestamp: Date.now()
+                }
+              });
+            }
+          }
+          else if (type === 'STREAM_CLOSE') {
+            // 스트림 종료
+            activeStreams.delete(streamId);
+          }
+        }
+      };
+    `;
+
+      // UI 요소 참조
+      const canvas = document.getElementById("canvas");
+      const colorInput = document.getElementById("color");
+      const sizeInput = document.getElementById("size");
+      const sizeValue = document.getElementById("size-value");
+      const clearButton = document.getElementById("clear");
+      const undoButton = document.getElementById("undo");
+      const startButton = document.getElementById("start");
+      const stopButton = document.getElementById("stop");
+      const statusElement = document.getElementById("status");
+      const fpsElement = document.getElementById("fps");
+
+      // 상태 변수
+      let isActive = false;
+      let isDrawing = false;
+      let lastFrameTime = 0;
+      let framesCount = 0;
+      let lastFpsUpdate = 0;
+      let streamId = null;
+      let historyLength = 0;
+
+      // Blob URL 생성
+      const workerBlob = new Blob([workerCode], {
+        type: "application/javascript",
+      });
+      const workerURL = URL.createObjectURL(workerBlob);
+
+      // Worker 생성
+      let worker = null;
+
+      // 초기 안내 텍스트 표시 (캔버스 컨텍스트를 생성하지 않고)
+      const initialMessageElement = document.createElement("div");
+      initialMessageElement.style.position = "absolute";
+      initialMessageElement.style.top = "50%";
+      initialMessageElement.style.left = "50%";
+      initialMessageElement.style.transform = "translate(-50%, -50%)";
+      initialMessageElement.style.color = "#999";
+      initialMessageElement.style.fontSize = "16px";
+      initialMessageElement.style.textAlign = "center";
+      initialMessageElement.style.width = "100%";
+      initialMessageElement.textContent =
+        "시작 버튼을 클릭하여 드로잉을 시작하세요";
+      canvas.parentElement.style.position = "relative";
+      canvas.parentElement.appendChild(initialMessageElement);
+
+      // 크기 입력 이벤트
+      sizeInput.addEventListener("input", () => {
+        const size = sizeInput.value;
+        sizeValue.textContent = `${size}px`;
+
+        if (isActive) {
+          sendDrawCommand({
+            action: "updateStyle",
+            size: parseInt(size, 10),
+          });
+        }
+      });
+
+      // 색상 입력 이벤트
+      colorInput.addEventListener("change", () => {
+        if (isActive) {
+          sendDrawCommand({
+            action: "updateStyle",
+            color: colorInput.value,
+          });
+        }
+      });
+
+      // 모두 지우기 버튼 이벤트
+      clearButton.addEventListener("click", () => {
+        if (isActive) {
+          sendDrawCommand({
+            action: "clear",
+          });
+        }
+      });
+
+      // 실행 취소 버튼 이벤트
+      undoButton.addEventListener("click", () => {
+        if (isActive && historyLength > 0) {
+          sendDrawCommand({
+            action: "undo",
+          });
+        }
+      });
+
+      // 캔버스 이벤트
+      canvas.addEventListener("pointerdown", (e) => {
+        if (!isActive) return;
+
+        // 그리기 시작
+        isDrawing = true;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        sendDrawCommand({
+          action: "startDrawing",
+          x,
+          y,
+        });
+      });
+
+      canvas.addEventListener("pointermove", (e) => {
+        if (!isActive || !isDrawing) return;
+
+        // 그리기 계속
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        sendDrawCommand({
+          action: "continueDrawing",
+          x,
+          y,
+        });
+
+        // FPS 계산
+        const now = performance.now();
+        framesCount++;
+
+        if (now - lastFpsUpdate >= 1000) {
+          const fps = Math.round((framesCount * 1000) / (now - lastFpsUpdate));
+          fpsElement.textContent = `FPS: ${fps}`;
+          framesCount = 0;
+          lastFpsUpdate = now;
+        }
+      });
+
+      canvas.addEventListener("pointerup", () => {
+        if (!isActive || !isDrawing) return;
+
+        // 그리기 종료
+        isDrawing = false;
+
+        sendDrawCommand({
+          action: "endDrawing",
+        });
+      });
+
+      canvas.addEventListener("pointerleave", () => {
+        if (!isActive || !isDrawing) return;
+
+        // 그리기 종료
+        isDrawing = false;
+
+        sendDrawCommand({
+          action: "endDrawing",
+        });
+      });
+
+      // 시작 버튼 이벤트
+      startButton.addEventListener("click", () => {
+        if (isActive) return;
+
+        try {
+          // 안내 텍스트 제거
+          if (initialMessageElement.parentElement) {
+            initialMessageElement.parentElement.removeChild(
+              initialMessageElement
+            );
+          }
+
+          // Worker 생성
+          worker = new Worker(workerURL);
+
+          // 캔버스 오프스크린 전송
+          // 주의: 이전에 getContext()를 호출하지 않은 상태여야 함
+          const offscreenCanvas = canvas.transferControlToOffscreen();
+
+          // 초기화 메시지 전송
+          worker.postMessage({ type: "init", canvas: offscreenCanvas }, [
+            offscreenCanvas,
+          ]);
+
+          // 초기화 대기
+          statusElement.textContent = "상태: 초기화 중...";
+
+          // Worker 메시지 이벤트
+          worker.addEventListener("message", handleWorkerMessage);
+        } catch (error) {
+          console.error("오프스크린 캔버스 초기화 오류:", error);
+          statusElement.textContent = "오류: " + error.message;
+        }
+      });
+
+      // Worker 메시지 핸들러
+      function handleWorkerMessage(event) {
+        const message = event.data;
+
+        if (message.type === "initialized") {
+          // 초기화 완료 후 스트림 시작
+          initializeStream();
+        } else if (message.type === "STREAM_READY") {
+          // 스트림 준비 완료
+          isActive = true;
+
+          // 상태 업데이트
+          statusElement.textContent = "상태: 연결됨";
+
+          // 버튼 상태 변경
+          startButton.disabled = true;
+          stopButton.disabled = false;
+
+          // 초기 스타일 설정
+          sendDrawCommand({
+            action: "updateStyle",
+            color: colorInput.value,
+            size: parseInt(sizeInput.value, 10),
+          });
+
+          // FPS 측정 시작
+          lastFpsUpdate = performance.now();
+          framesCount = 0;
+        } else if (message.type === "STREAM_MESSAGE") {
+          // 상태 업데이트
+          if (message.data && message.data.historyLength !== undefined) {
+            historyLength = message.data.historyLength;
+            undoButton.disabled = !(isActive && historyLength > 0);
+          }
+        }
+      }
+
+      // 스트림 초기화
+      function initializeStream() {
+        // 스트림 ID 생성
+        streamId = "stream-" + Date.now();
+
+        // 초기화 메시지 전송
+        worker.postMessage({
+          type: "STREAM_INIT",
+          streamId,
+          timestamp: Date.now(),
+        });
+      }
+
+      // 드로잉 명령 전송
+      function sendDrawCommand(data) {
+        if (!isActive || !worker || !streamId) return;
+
+        worker.postMessage({
+          type: "STREAM_MESSAGE",
+          streamId,
+          data,
+          timestamp: Date.now(),
+        });
+      }
+
+      // 중지 버튼 이벤트
+      stopButton.addEventListener("click", () => {
+        if (!isActive) return;
+
+        // 스트림 종료
+        if (worker && streamId) {
+          worker.postMessage({
+            type: "STREAM_CLOSE",
+            streamId,
+            timestamp: Date.now(),
+          });
+        }
+
+        // Worker 종료
+        if (worker) {
+          worker.terminate();
+          worker = null;
+        }
+
+        // 상태 업데이트
+        isActive = false;
+        isDrawing = false;
+
+        // 버튼 상태 변경
+        startButton.disabled = false;
+        stopButton.disabled = true;
+        undoButton.disabled = true;
+        statusElement.textContent = "상태: 중지됨";
+        fpsElement.textContent = "FPS: -";
+
+        // 안내 텍스트 다시 표시
+        initialMessageElement.textContent =
+          "시작 버튼을 클릭하여 드로잉을 시작하세요";
+        canvas.parentElement.appendChild(initialMessageElement);
+      });
+
+      // 페이지 종료 시 정리
+      window.addEventListener("beforeunload", () => {
+        if (isActive && worker && streamId) {
+          worker.postMessage({
+            type: "STREAM_CLOSE",
+            streamId,
+            timestamp: Date.now(),
+          });
+        }
+
+        if (worker) {
+          worker.terminate();
+        }
+
+        URL.revokeObjectURL(workerURL);
+      });
+    </script>
+  </body>
+</html>

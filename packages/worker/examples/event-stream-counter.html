@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>이벤트 스트림 카운터 예제</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background-color: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+      }
+      .counter {
+        font-size: 3rem;
+        text-align: center;
+        margin: 20px 0;
+        font-weight: bold;
+        color: #2c3e50;
+      }
+      .controls {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        background-color: #3498db;
+        color: white;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: background-color 0.2s;
+      }
+      button:hover {
+        background-color: #2980b9;
+      }
+      button:disabled {
+        background-color: #95a5a6;
+        cursor: not-allowed;
+      }
+      .log {
+        background-color: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 10px;
+        max-height: 200px;
+        overflow-y: auto;
+        font-family: monospace;
+        margin-top: 20px;
+      }
+      .status {
+        text-align: right;
+        color: #7f8c8d;
+        font-size: 0.9rem;
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>이벤트 스트림 카운터 예제</h1>
+
+      <div class="counter" id="counter">0</div>
+
+      <div class="controls">
+        <button id="decrement">감소 (-5)</button>
+        <button id="increment">증가 (+5)</button>
+        <button id="reset">리셋</button>
+        <button id="connect">연결</button>
+        <button id="disconnect" disabled>연결 해제</button>
+      </div>
+
+      <div class="log" id="log"></div>
+
+      <div class="status" id="status">연결 상태: 연결되지 않음</div>
+    </div>
+
+    <script type="module">
+      // Worker 코드를 문자열로 정의
+      const workerCode = `
+      // 카운터 상태
+      let counter = 0;
+      
+      // 스트림 관리
+      const activeStreams = new Set();
+      
+      // 메시지 핸들러
+      self.onmessage = function(event) {
+        const message = event.data;
+        
+        // 스트림 메시지 처리
+        if (message && message.type && message.type.startsWith('STREAM_')) {
+          const { type, streamId, data } = message;
+          
+          if (type === 'STREAM_INIT') {
+            // 스트림 초기화
+            activeStreams.add(streamId);
+            
+            // 초기값 설정
+            if (data && data.startValue !== undefined) {
+              counter = data.startValue;
+            }
+            
+            // 준비 완료 응답
+            self.postMessage({
+              type: 'STREAM_READY',
+              streamId,
+              timestamp: Date.now()
+            });
+            
+            // 초기 카운터 값 전송
+            self.postMessage({
+              type: 'STREAM_MESSAGE',
+              streamId,
+              data: { counter, action: 'init' },
+              timestamp: Date.now()
+            });
+          }
+          else if (type === 'STREAM_MESSAGE' && activeStreams.has(streamId)) {
+            // 명령 처리
+            if (data && data.action) {
+              switch (data.action) {
+                case 'increment':
+                  counter += (data.value || 1);
+                  break;
+                  
+                case 'decrement':
+                  counter -= (data.value || 1);
+                  break;
+                  
+                case 'reset':
+                  counter = data.value || 0;
+                  break;
+                  
+                case 'get':
+                  // 아무 것도 하지 않음
+                  break;
+              }
+              
+              // 결과 전송
+              self.postMessage({
+                type: 'STREAM_MESSAGE',
+                streamId,
+                data: { 
+                  counter, 
+                  action: data.action,
+                  timestamp: Date.now()
+                }
+              });
+            }
+          }
+          else if (type === 'STREAM_CLOSE') {
+            // 스트림 종료
+            activeStreams.delete(streamId);
+          }
+        }
+      };
+    `;
+
+      // Blob URL 생성
+      const workerBlob = new Blob([workerCode], {
+        type: "application/javascript",
+      });
+      const workerURL = URL.createObjectURL(workerBlob);
+
+      // Worker 생성
+      const worker = new Worker(workerURL);
+
+      // UI 요소 참조
+      const counterElement = document.getElementById("counter");
+      const decrementButton = document.getElementById("decrement");
+      const incrementButton = document.getElementById("increment");
+      const resetButton = document.getElementById("reset");
+      const connectButton = document.getElementById("connect");
+      const disconnectButton = document.getElementById("disconnect");
+      const logElement = document.getElementById("log");
+      const statusElement = document.getElementById("status");
+
+      // 스트림 ID
+      let streamId = null;
+      let isConnected = false;
+
+      // 로그 기록 함수
+      function log(message) {
+        const entry = document.createElement("div");
+        entry.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+        logElement.appendChild(entry);
+        logElement.scrollTop = logElement.scrollHeight;
+      }
+
+      // 연결 버튼 이벤트
+      connectButton.addEventListener("click", () => {
+        if (isConnected) return;
+
+        // 스트림 ID 생성
+        streamId = "stream-" + Date.now();
+
+        // 초기화 메시지 전송
+        worker.postMessage({
+          type: "STREAM_INIT",
+          streamId,
+          data: { startValue: 0 },
+          timestamp: Date.now(),
+        });
+
+        log("스트림 초기화 요청...");
+
+        // 버튼 상태 변경
+        connectButton.disabled = true;
+        statusElement.textContent = "연결 상태: 연결 중...";
+      });
+
+      // 연결 해제 버튼 이벤트
+      disconnectButton.addEventListener("click", () => {
+        if (!isConnected) return;
+
+        // 종료 메시지 전송
+        worker.postMessage({
+          type: "STREAM_CLOSE",
+          streamId,
+          timestamp: Date.now(),
+        });
+
+        log("스트림 종료");
+
+        // 상태 업데이트
+        isConnected = false;
+
+        // 버튼 상태 변경
+        connectButton.disabled = false;
+        disconnectButton.disabled = true;
+        incrementButton.disabled = true;
+        decrementButton.disabled = true;
+        resetButton.disabled = true;
+        statusElement.textContent = "연결 상태: 연결되지 않음";
+      });
+
+      // 증가 버튼 이벤트
+      incrementButton.addEventListener("click", () => {
+        if (!isConnected) return;
+
+        // 증가 메시지 전송
+        worker.postMessage({
+          type: "STREAM_MESSAGE",
+          streamId,
+          data: { action: "increment", value: 5 },
+          timestamp: Date.now(),
+        });
+
+        log("증가 명령 전송 (+5)");
+      });
+
+      // 감소 버튼 이벤트
+      decrementButton.addEventListener("click", () => {
+        if (!isConnected) return;
+
+        // 감소 메시지 전송
+        worker.postMessage({
+          type: "STREAM_MESSAGE",
+          streamId,
+          data: { action: "decrement", value: 5 },
+          timestamp: Date.now(),
+        });
+
+        log("감소 명령 전송 (-5)");
+      });
+
+      // 리셋 버튼 이벤트
+      resetButton.addEventListener("click", () => {
+        if (!isConnected) return;
+
+        // 리셋 메시지 전송
+        worker.postMessage({
+          type: "STREAM_MESSAGE",
+          streamId,
+          data: { action: "reset", value: 0 },
+          timestamp: Date.now(),
+        });
+
+        log("리셋 명령 전송");
+      });
+
+      // Worker 메시지 이벤트
+      worker.addEventListener("message", (event) => {
+        const message = event.data;
+
+        // 스트림 메시지 처리
+        if (message && message.type && message.type.startsWith("STREAM_")) {
+          if (message.type === "STREAM_READY") {
+            log("스트림 연결 완료");
+
+            // 상태 업데이트
+            isConnected = true;
+
+            // 버튼 상태 변경
+            disconnectButton.disabled = false;
+            incrementButton.disabled = false;
+            decrementButton.disabled = false;
+            resetButton.disabled = false;
+            statusElement.textContent = "연결 상태: 연결됨";
+          } else if (message.type === "STREAM_MESSAGE") {
+            // 카운터 값 업데이트
+            const { counter, action } = message.data;
+            counterElement.textContent = counter;
+
+            log(`카운터 업데이트: ${counter} (액션: ${action})`);
+          }
+        }
+      });
+
+      // 페이지 종료 시 정리
+      window.addEventListener("beforeunload", () => {
+        if (isConnected && streamId) {
+          worker.postMessage({
+            type: "STREAM_CLOSE",
+            streamId,
+            timestamp: Date.now(),
+          });
+        }
+
+        // Worker 종료
+        worker.terminate();
+
+        // Blob URL 해제
+        URL.revokeObjectURL(workerURL);
+      });
+    </script>
+  </body>
+</html>
