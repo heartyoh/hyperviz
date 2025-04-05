@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>날씨 시각화 예제 - Hyperviz Weather</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css"
+    />
+    <style>
+      :root {
+        --primary-color: #3498db;
+        --secondary-color: #2980b9;
+        --background-color: #f5f5f5;
+        --text-color: #333;
+        --error-color: #e74c3c;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background-color: var(--background-color);
+        color: var(--text-color);
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        background-color: var(--primary-color);
+        color: white;
+        padding: 1rem;
+        text-align: center;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.8rem;
+      }
+
+      #app {
+        flex: 1;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .content {
+        width: 100%;
+        max-width: 1200px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .map-container {
+        flex: 1;
+        height: 500px;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid rgba(0, 0, 0, 0.1);
+        border-radius: 50%;
+        border-top-color: var(--primary-color);
+        animation: spin 1s ease-in-out infinite;
+        margin-bottom: 1rem;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .error {
+        text-align: center;
+        color: var(--error-color);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      button {
+        margin-top: 1rem;
+        padding: 0.5rem 1rem;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+
+      button:hover {
+        background-color: var(--secondary-color);
+      }
+
+      footer {
+        background-color: var(--primary-color);
+        color: white;
+        text-align: center;
+        padding: 0.5rem;
+        font-size: 0.8rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Hyperviz 날씨 시각화 예제</h1>
+    </header>
+
+    <div id="app">
+      <div class="loading">
+        <div class="spinner"></div>
+        <div class="message">예제 로딩 중...</div>
+      </div>
+    </div>
+
+    <footer>&copy; 2023 Hyperviz Weather. 모든 권리 보유.</footer>
+
+    <!-- <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script> -->
+
+    <script type="importmap">
+      {
+        "imports": {
+          "ol/": "https://cdn.skypack.dev/ol/",
+          "ol/source/ImageCanvas": "https://cdn.skypack.dev/ol/source/ImageCanvas",
+          "ol/layer/Image": "https://cdn.skypack.dev/ol/layer/Image",
+          "ol/proj": "https://cdn.skypack.dev/ol/proj",
+          "ol/extent": "https://cdn.skypack.dev/ol/extent",
+          "@hyperviz/worker": "/node_modules/@hyperviz/worker/dist/index.js",
+          "eventemitter3": "https://esm.sh/eventemitter3@5.0.1",
+          "crypto": "https://esm.sh/crypto-browserify@3.12.0"
+        }
+      }
+    </script>
+
+    <script type="module" src="../dist/examples/src/example.js"></script>
+  </body>
+</html>

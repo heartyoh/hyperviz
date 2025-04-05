@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hyperviz Weather - 바람 레이어 데모</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        font-family: "Noto Sans KR", sans-serif;
+      }
+      #map {
+        width: 100%;
+        height: 100%;
+        background-color: #0f1621;
+      }
+      .controls {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 15px;
+        border-radius: 8px;
+        z-index: 1000;
+        width: 250px;
+      }
+      .control-group {
+        margin-bottom: 15px;
+      }
+      .control-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+      }
+      .control-group input[type="range"] {
+        width: 100%;
+      }
+      .control-group .value {
+        font-size: 0.9em;
+        color: #ccc;
+        float: right;
+      }
+      button {
+        background: #3498db;
+        color: white;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-right: 8px;
+        margin-bottom: 8px;
+      }
+      button:hover {
+        background: #2980b9;
+      }
+      .status {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.5);
+        color: white;
+        padding: 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        z-index: 1000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <div class="controls">
+      <h3>바람 레이어 컨트롤</h3>
+
+      <div class="control-group">
+        <label>
+          <input type="checkbox" id="windLayerToggle" checked />
+          바람 레이어 표시
+        </label>
+      </div>
+
+      <div class="control-group">
+        <label>
+          최대 풍속 <span id="maxSpeedValue" class="value">15 m/s</span>
+        </label>
+        <input
+          type="range"
+          id="maxSpeed"
+          min="5"
+          max="30"
+          value="15"
+          step="1"
+        />
+      </div>
+
+      <div class="control-group">
+        <label>
+          파티클 밀도 <span id="densityValue" class="value">0.8</span>
+        </label>
+        <input
+          type="range"
+          id="density"
+          min="0.2"
+          max="2"
+          value="0.8"
+          step="0.1"
+        />
+      </div>
+
+      <div class="control-group">
+        <label>
+          페이드 효과 <span id="fadeValue" class="value">0.92</span>
+        </label>
+        <input
+          type="range"
+          id="fade"
+          min="0.8"
+          max="0.98"
+          value="0.92"
+          step="0.01"
+        />
+      </div>
+
+      <div class="control-group">
+        <label>
+          선 두께 <span id="lineWidthValue" class="value">1.5</span>
+        </label>
+        <input
+          type="range"
+          id="lineWidth"
+          min="0.5"
+          max="3"
+          value="1.5"
+          step="0.1"
+        />
+      </div>
+
+      <button id="resetView">지도 초기화</button>
+      <button id="refreshData">데이터 새로고침</button>
+    </div>
+
+    <div class="status" id="status">데이터 로딩 중...</div>
+
+    <!-- <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script> -->
+
+    <!-- importmap 추가 -->
+    <script type="importmap">
+      {
+        "imports": {
+          "ol/": "https://cdn.skypack.dev/ol/",
+          "ol/source/ImageCanvas": "https://cdn.skypack.dev/ol/source/ImageCanvas",
+          "ol/layer/Image": "https://cdn.skypack.dev/ol/layer/Image",
+          "ol/proj": "https://cdn.skypack.dev/ol/proj",
+          "ol/extent": "https://cdn.skypack.dev/ol/extent",
+          "@hyperviz/worker": "/node_modules/@hyperviz/worker/dist/index.js",
+          "eventemitter3": "https://esm.sh/eventemitter3@5.0.1",
+          "crypto": "https://esm.sh/crypto-browserify@3.12.0"
+        }
+      }
+    </script>
+
+    <!-- 실제 빌드 환경에서는 번들된 파일을 사용하지만, 데모에서는 직접 소스 참조 -->
+    <script type="module" src="./index.js"></script>
+  </body>
+</html>
