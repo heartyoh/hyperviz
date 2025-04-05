@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.1.2](https://github.com/heartyoh/hyperviz/compare/v0.1.1...v0.1.2) (2025-04-05)
+
+
+### :bug: Bug Fix
+
+* .gitignore ([f155c70](https://github.com/heartyoh/hyperviz/commit/f155c70e6ca8cb2a54237ae96c853a643b74bb89))
+* package.json ([e65e19d](https://github.com/heartyoh/hyperviz/commit/e65e19d8ca2c6bb185f1afc4bbcb81ff9a816ce4))
+
+
+
 ## [0.1.1](https://github.com/heartyoh/hyperviz/compare/v0.1.0...v0.1.1) (2025-04-05)
 
 **Note:** Version bump only for package hyperviz
