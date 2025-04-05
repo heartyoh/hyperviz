@@ -56,7 +56,7 @@ interface MockWorker extends MockEventEmitter {
 }
 
 // WorkerManager 모킹 수정
-jest.mock("../src/core/manager/worker-manager.js", () => {
+jest.mock("../src/core/worker-manager.js", () => {
   return {
     WorkerManager: jest
       .fn()

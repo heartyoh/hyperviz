@@ -4,9 +4,9 @@
  */
 
 import { EventEmitter } from "eventemitter3";
-import { IWorker, WorkerStatus, WorkerType } from "../../types/index.js";
-import { WorkerAdapter } from "../worker-adapter.js";
-import { generateId } from "../utils.js";
+import { IWorker, WorkerStatus, WorkerType } from "../types/index.js";
+import { WorkerAdapter } from "./worker-adapter.js";
+import { generateId } from "./utils.js";
 
 /**
  * 워커 매니저 설정 인터페이스

@@ -4,7 +4,7 @@
  */
 
 import { EventEmitter } from "eventemitter3";
-import { Task, TaskStatus } from "../../types/index.js";
+import { Task, TaskStatus } from "../types/index.js";
 
 /**
  * 태스크 이벤트 타입

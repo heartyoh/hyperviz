@@ -1,7 +1,7 @@
 /**
  * TaskQueue 테스트
  */
-import { TaskQueue } from "../src/core/queue/task-queue";
+import { TaskQueue } from "../src/core/task-queue";
 import { Task, TaskPriority, TaskStatus, WorkerType } from "../src/types/index";
 
 describe("TaskQueue", () => {

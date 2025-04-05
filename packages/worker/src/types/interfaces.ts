@@ -8,7 +8,7 @@ import {
   TaskEventData,
   TaskEventType,
   WorkerEventType,
-} from "../core/events/event-hub.js";
+} from "../core/event-hub.js";
 import {
   Task,
   TaskStatus,

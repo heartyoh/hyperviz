@@ -5,7 +5,9 @@ import {
   EventHub,
   TaskEventType,
   WorkerEventType,
-} from "../src/core/events/event-hub";
+  TaskEventData,
+  WorkerEventData,
+} from "../src/core/event-hub";
 import { TaskStatus } from "../src/types/index";
 
 describe("EventHub", () => {

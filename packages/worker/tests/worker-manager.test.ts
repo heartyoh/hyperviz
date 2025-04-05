@@ -2,7 +2,7 @@
  * WorkerManager 테스트
  */
 import { EventEmitter } from "eventemitter3";
-import { WorkerManager } from "../src/core/manager/worker-manager";
+import { WorkerManager } from "../src/core/worker-manager";
 import { WorkerStatus, WorkerType } from "../src/types/index";
 
 // WorkerAdapter 모킹

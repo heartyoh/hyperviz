@@ -11,13 +11,9 @@ import {
   WorkerType,
   WorkerStatus,
 } from "../types/index.js";
-import { TaskQueue } from "./queue/task-queue.js";
-import { WorkerManager } from "./manager/worker-manager.js";
-import {
-  EventHub,
-  TaskEventType,
-  WorkerEventType,
-} from "./events/event-hub.js";
+import { TaskQueue } from "./task-queue.js";
+import { WorkerManager } from "./worker-manager.js";
+import { EventHub, TaskEventType, WorkerEventType } from "./event-hub.js";
 import { logger } from "../utils/logger.js";
 import { generateId } from "./utils.js";
 

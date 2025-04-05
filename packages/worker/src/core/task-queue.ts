@@ -3,7 +3,7 @@
  * 우선순위 기반 태스크 큐 구현
  */
 
-import { Task, TaskPriority } from "../../types/index.js";
+import { Task, TaskPriority } from "../types/index.js";
 
 /**
  * 태스크 큐 인터페이스
