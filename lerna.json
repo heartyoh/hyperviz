@@ -1,16 +1,61 @@
 {
-  "version": "independent",
-  "npmClient": "yarn",
-  "useWorkspaces": true,
   "packages": ["packages/*"],
+  "npmClient": "yarn",
+  "version": "0.1.0",
   "command": {
     "publish": {
-      "conventionalCommits": true,
-      "message": "chore(release): publish"
+      "skipNpm": false,
+      "ignoreChanges": ["**/*.md", "**/tests/**", "**/test/**"],
+      "conventionalCommits": true
     },
     "version": {
+      "allowBranch": ["main", "feature/*", "v*"],
       "conventionalCommits": true,
-      "message": "chore(release): version"
+      "changelogPreset": {
+        "name": "conventional-changelog-conventionalcommits",
+        "types": [
+          {
+            "type": "feat",
+            "section": ":rocket: New Features",
+            "hidden": false
+          },
+          {
+            "type": "fix",
+            "section": ":bug: Bug Fix",
+            "hidden": false
+          },
+          {
+            "type": "docs",
+            "section": ":memo: Documentation",
+            "hidden": false
+          },
+          {
+            "type": "style",
+            "section": ":sparkles: Styling",
+            "hidden": false
+          },
+          {
+            "type": "refactor",
+            "section": ":house: Code Refactoring",
+            "hidden": false
+          },
+          {
+            "type": "build",
+            "section": ":hammer: Build System",
+            "hidden": false
+          },
+          {
+            "type": "chore",
+            "section": ":mega: Other",
+            "hidden": false
+          }
+        ],
+        "issuePrefixes": ["#"],
+        "issueUrlFormat": "{{host}}/{{owner}}/{{repository}}/issues/{{id}}",
+        "commitUrlFormat": "{{host}}/{{owner}}/{{repository}}/commit/{{hash}}",
+        "compareUrlFormat": "{{host}}/{{owner}}/{{repository}}/compare/{{previousTag}}...{{currentTag}}",
+        "userUrlFormat": "{{host}}/{{user}}"
+      }
     }
   }
 }

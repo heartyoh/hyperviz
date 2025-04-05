@@ -1,14 +1,18 @@
 {
-  "name": "hyperviz-monorepo",
-  "version": "0.0.1",
+  "name": "hyperviz",
+  "version": "0.1.0",
   "private": true,
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "build": "yarn workspaces run build",
-    "test": "yarn workspaces run test",
-    "clean": "yarn workspaces run clean"
+    "build": "lerna run build --stream",
+    "test": "jest",
+    "clean": "rimraf ./{services,packages,webcomponents,apps}/*/dist ./{services,packages,webcomponents,apps}/**/*.buildinfo ./{services,packages,webcomponents,apps}/dist/*/*.{d.ts,js,esnext,mjs} .sewing-kit",
+    "build:clean": "rm yarn.lock || echo 'yarn.lock not found.' && yarn clean && yarn install && yarn build",
+    "release": "lerna publish",
+    "release-beta": "lerna publish --dist-tag beta",
+    "release:force": "lerna publish --force-publish=*"
   },
   "devDependencies": {
     "http-server": "^14.1.1",

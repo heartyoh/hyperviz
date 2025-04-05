@@ -21,7 +21,7 @@
     "parallel",
     "processing"
   ],
-  "author": "HyperViz Team",
+  "author": "hatiolab.com",
   "license": "MIT",
   "devDependencies": {
     "@types/jest": "^29.5.0",
