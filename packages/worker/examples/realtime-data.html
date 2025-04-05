@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>실시간 데이터 처리 예제</title>
+    <title>실시간 데이터 처리 예제 (TypeScript)</title>
     <style>
       body {
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -107,11 +107,22 @@
         min-width: 50px;
         text-align: right;
       }
+      .debug-log {
+        margin-top: 20px;
+        height: 150px;
+        overflow-y: auto;
+        background-color: #f5f5f5;
+        padding: 10px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 12px;
+        border: 1px solid #ddd;
+      }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>실시간 데이터 처리 예제</h1>
+      <h1>실시간 데이터 처리 예제 (TypeScript)</h1>
 
       <div class="row">
         <label for="data-points">데이터 포인트:</label>
@@ -181,238 +192,27 @@
         <div id="status">상태: 대기 중</div>
         <div id="memory-usage">메모리 사용량: -</div>
       </div>
+
+      <div class="debug-log" id="debug-log"></div>
     </div>
 
     <script type="module">
-      // Worker 코드를 문자열로 정의
-      const workerCode = `
-      // 데이터 및 설정
-      let dataPoints = 100;
-      let noiseLevel = 10;
-      let updateInterval = 100;
-      
-      // 데이터 시리즈
-      let dataSeries = [];
-      
-      // 통계
-      let stats = {
-        min: 0,
-        max: 0,
-        avg: 0,
-        processTime: 0
-      };
-      
-      // 타이머
-      let updateTimer = null;
-      
-      // 스트림 관리
-      const activeStreams = new Set();
-      
-      // 데이터 초기화
-      function initializeData() {
-        // 데이터 배열 생성
-        dataSeries = [];
-        for (let i = 0; i < dataPoints; i++) {
-          // 사인파에 노이즈 추가
-          const x = i / dataPoints * Math.PI * 4;
-          const baseValue = Math.sin(x) * 100;
-          const noise = (Math.random() * 2 - 1) * noiseLevel;
-          dataSeries.push(baseValue + noise);
+      // 디버그 로그 함수
+      const debugLog = document.getElementById("debug-log");
+
+      function log(message, data) {
+        const timestamp = new Date().toLocaleTimeString();
+        const logEntry = document.createElement("div");
+        logEntry.textContent = `${timestamp}: ${message}`;
+
+        if (data) {
+          console.log(message, data);
+          logEntry.textContent += ` - ${JSON.stringify(data)}`;
         }
-        
-        // 통계 계산
-        calculateStats();
+
+        debugLog.appendChild(logEntry);
+        debugLog.scrollTop = debugLog.scrollHeight;
       }
-      
-      // 통계 계산
-      function calculateStats() {
-        const startTime = performance.now();
-        
-        // 최소값, 최대값, 평균
-        let min = Number.MAX_VALUE;
-        let max = Number.MIN_VALUE;
-        let sum = 0;
-        
-        for (let i = 0; i < dataSeries.length; i++) {
-          const value = dataSeries[i];
-          min = Math.min(min, value);
-          max = Math.max(max, value);
-          sum += value;
-        }
-        
-        const avg = sum / dataSeries.length;
-        
-        // 처리 시간
-        const endTime = performance.now();
-        const processTime = endTime - startTime;
-        
-        // 통계 업데이트
-        stats = {
-          min: min.toFixed(2),
-          max: max.toFixed(2),
-          avg: avg.toFixed(2),
-          processTime: processTime.toFixed(2)
-        };
-      }
-      
-      // 데이터 업데이트
-      function updateData() {
-        // 새 데이터 포인트 생성
-        const newPoint = Math.sin(Date.now() / 1000) * 100 + (Math.random() * 2 - 1) * noiseLevel;
-        
-        // 첫 데이터 제거하고 새 데이터 추가
-        dataSeries.shift();
-        dataSeries.push(newPoint);
-        
-        // 통계 계산
-        calculateStats();
-        
-        // 모든 활성 스트림에 데이터 전송
-        for (const streamId of activeStreams) {
-          self.postMessage({
-            type: 'STREAM_MESSAGE',
-            streamId,
-            data: {
-              series: dataSeries,
-              stats: stats
-            },
-            timestamp: Date.now()
-          });
-        }
-      }
-      
-      // 업데이트 시작
-      function startUpdates() {
-        if (updateTimer) return;
-        
-        updateTimer = setInterval(updateData, updateInterval);
-      }
-      
-      // 업데이트 중지
-      function stopUpdates() {
-        if (updateTimer) {
-          clearInterval(updateTimer);
-          updateTimer = null;
-        }
-      }
-      
-      // 설정 업데이트
-      function updateSettings(settings) {
-        // 중지 후 설정 업데이트
-        const wasRunning = !!updateTimer;
-        stopUpdates();
-        
-        // 파라미터 업데이트
-        if (settings.dataPoints !== undefined) {
-          dataPoints = settings.dataPoints;
-        }
-        
-        if (settings.noiseLevel !== undefined) {
-          noiseLevel = settings.noiseLevel;
-        }
-        
-        if (settings.updateInterval !== undefined) {
-          updateInterval = settings.updateInterval;
-        }
-        
-        // 데이터 재초기화
-        initializeData();
-        
-        // 이전에 실행 중이었다면 재시작
-        if (wasRunning) {
-          startUpdates();
-        }
-      }
-      
-      // 메모리 사용량 추정
-      function getMemoryUsage() {
-        let usage = 0;
-        
-        // 데이터 시리즈 (8바이트 * 길이)
-        usage += dataSeries.length * 8;
-        
-        // 기타 변수 및 상태
-        usage += 1000; // 예상 오버헤드
-        
-        return usage;
-      }
-      
-      // 메시지 핸들러
-      self.onmessage = function(event) {
-        const message = event.data;
-        
-        // 스트림 메시지 처리
-        if (message.type && message.type.startsWith('STREAM_')) {
-          const { type, streamId, data } = message;
-          
-          if (type === 'STREAM_INIT') {
-            // 스트림 초기화
-            activeStreams.add(streamId);
-            
-            // 설정 적용
-            if (data && data.settings) {
-              updateSettings(data.settings);
-            } else {
-              // 기본 데이터 초기화
-              initializeData();
-            }
-            
-            // 준비 완료 응답
-            self.postMessage({
-              type: 'STREAM_READY',
-              streamId,
-              data: {
-                series: dataSeries,
-                stats: stats,
-                memoryUsage: getMemoryUsage()
-              },
-              timestamp: Date.now()
-            });
-          }
-          else if (type === 'STREAM_MESSAGE' && activeStreams.has(streamId)) {
-            // 명령 처리
-            if (data && data.action) {
-              switch (data.action) {
-                case 'start':
-                  startUpdates();
-                  break;
-                  
-                case 'stop':
-                  stopUpdates();
-                  break;
-                  
-                case 'updateSettings':
-                  updateSettings(data.settings || {});
-                  break;
-                  
-                case 'getStats':
-                  // 현재 통계 전송
-                  self.postMessage({
-                    type: 'STREAM_MESSAGE',
-                    streamId,
-                    data: {
-                      series: dataSeries,
-                      stats: stats,
-                      memoryUsage: getMemoryUsage()
-                    },
-                    timestamp: Date.now()
-                  });
-                  break;
-              }
-            }
-          }
-          else if (type === 'STREAM_CLOSE') {
-            // 스트림 종료
-            activeStreams.delete(streamId);
-            
-            // 모든 스트림이 종료되면 업데이트 중지
-            if (activeStreams.size === 0) {
-              stopUpdates();
-            }
-          }
-        }
-      };
-    `;
 
       // UI 요소 참조
       const canvas = document.getElementById("chart");
@@ -444,6 +244,9 @@
         noiseLevel: parseInt(noiseLevelInput.value, 10),
         updateInterval: parseInt(updateRateInput.value, 10),
       };
+
+      // TypeScript 워커 파일 경로 - 사전에 컴파일된 JavaScript 파일
+      const workerScriptPath = "../dist/examples/data-processor-worker.js";
 
       // 차트 설정
       const chartContext = canvas.getContext("2d");
@@ -512,50 +315,70 @@
           terminateWorker();
         }
 
-        // Blob URL 생성
-        const workerBlob = new Blob([workerCode], {
-          type: "application/javascript",
-        });
-        const workerURL = URL.createObjectURL(workerBlob);
+        log("워커 초기화 시도", { path: workerScriptPath });
 
-        // Worker 생성
-        worker = new Worker(workerURL);
+        try {
+          // Worker 생성
+          worker = new Worker(workerScriptPath, {
+            type: "module",
+          });
 
-        // Worker 메시지 이벤트
-        worker.addEventListener("message", handleWorkerMessage);
+          log("워커 생성 성공");
 
-        // 스트림 ID 생성
-        streamId = "stream-" + Date.now();
+          // Worker 오류 이벤트
+          worker.onerror = function (e) {
+            log("워커 오류 발생", {
+              message: e.message,
+              filename: e.filename,
+              lineno: e.lineno,
+            });
+          };
 
-        // 초기화 메시지 전송
-        worker.postMessage({
-          type: "STREAM_INIT",
-          streamId,
-          data: {
-            settings: {
-              dataPoints: settings.dataPoints,
-              noiseLevel: settings.noiseLevel,
-              updateInterval: settings.updateInterval,
+          // Worker 메시지 이벤트
+          worker.addEventListener("message", handleWorkerMessage);
+
+          log("워커 메시지 리스너 등록됨");
+
+          // 스트림 ID 생성
+          streamId = "stream-" + Date.now();
+
+          log("스트림 초기화", { streamId });
+
+          // 초기화 메시지 전송
+          worker.postMessage({
+            type: "STREAM_INIT",
+            streamId,
+            data: {
+              settings: {
+                dataPoints: settings.dataPoints,
+                noiseLevel: settings.noiseLevel,
+                updateInterval: settings.updateInterval,
+              },
             },
-          },
-          timestamp: Date.now(),
-        });
+            timestamp: Date.now(),
+          });
 
-        // 상태 업데이트
-        statusElement.textContent = "상태: 초기화 중...";
-
-        // URL 객체 해제
-        URL.revokeObjectURL(workerURL);
+          // 상태 업데이트
+          statusElement.textContent = "상태: 초기화 중...";
+        } catch (error) {
+          log("워커 초기화 오류", { error: error.message });
+          console.error("워커 초기화 오류:", error);
+          statusElement.textContent = "오류: " + error.message;
+        }
       }
 
       // Worker 메시지 핸들러
       function handleWorkerMessage(event) {
         const message = event.data;
 
+        log("워커 메시지 수신", { type: message.type });
+
         // 스트림 메시지 처리
         if (message.type === "STREAM_READY") {
           // 스트림 준비 완료
           isActive = true;
+
+          log("스트림 준비 완료");
 
           // 데이터 업데이트
           updateChartData(message.data.series);
@@ -731,6 +554,8 @@
       function startDataStream() {
         if (!isActive || isRunning) return;
 
+        log("데이터 스트림 시작");
+
         sendCommand({
           action: "start",
         });
@@ -749,6 +574,8 @@
       // 데이터 스트림 중지
       function stopDataStream() {
         if (!isActive || !isRunning) return;
+
+        log("데이터 스트림 중지");
 
         sendCommand({
           action: "stop",
@@ -773,6 +600,8 @@
       function sendCommand(data) {
         if (!isActive || !worker || !streamId) return;
 
+        log("명령 전송", data);
+
         worker.postMessage({
           type: "STREAM_MESSAGE",
           streamId,
@@ -783,6 +612,8 @@
 
       // Worker 종료
       function terminateWorker() {
+        log("워커 종료 시작");
+
         // 스트림 종료
         if (worker && streamId) {
           worker.postMessage({
@@ -790,12 +621,15 @@
             streamId,
             timestamp: Date.now(),
           });
+
+          log("스트림 종료 메시지 전송");
         }
 
         // Worker 종료
         if (worker) {
           worker.terminate();
           worker = null;
+          log("워커 종료됨");
         }
 
         // 애니메이션 중지
@@ -814,6 +648,8 @@
         startButton.textContent = "시작";
         stopButton.disabled = true;
         statusElement.textContent = "상태: 대기 중";
+
+        log("워커 종료 완료");
       }
 
       // 차트 초기 크기 설정

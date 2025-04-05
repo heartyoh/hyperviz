@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>이벤트 스트림 카운터 예제</title>
+    <title>이벤트 스트림 카운터 예제 (TypeScript)</title>
     <style>
       body {
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -73,7 +73,7 @@
   </head>
   <body>
     <div class="container">
-      <h1>이벤트 스트림 카운터 예제</h1>
+      <h1>이벤트 스트림 카운터 예제 (TypeScript)</h1>
 
       <div class="counter" id="counter">0</div>
 
@@ -91,95 +91,13 @@
     </div>
 
     <script type="module">
-      // Worker 코드를 문자열로 정의
-      const workerCode = `
-      // 카운터 상태
-      let counter = 0;
-      
-      // 스트림 관리
-      const activeStreams = new Set();
-      
-      // 메시지 핸들러
-      self.onmessage = function(event) {
-        const message = event.data;
-        
-        // 스트림 메시지 처리
-        if (message && message.type && message.type.startsWith('STREAM_')) {
-          const { type, streamId, data } = message;
-          
-          if (type === 'STREAM_INIT') {
-            // 스트림 초기화
-            activeStreams.add(streamId);
-            
-            // 초기값 설정
-            if (data && data.startValue !== undefined) {
-              counter = data.startValue;
-            }
-            
-            // 준비 완료 응답
-            self.postMessage({
-              type: 'STREAM_READY',
-              streamId,
-              timestamp: Date.now()
-            });
-            
-            // 초기 카운터 값 전송
-            self.postMessage({
-              type: 'STREAM_MESSAGE',
-              streamId,
-              data: { counter, action: 'init' },
-              timestamp: Date.now()
-            });
-          }
-          else if (type === 'STREAM_MESSAGE' && activeStreams.has(streamId)) {
-            // 명령 처리
-            if (data && data.action) {
-              switch (data.action) {
-                case 'increment':
-                  counter += (data.value || 1);
-                  break;
-                  
-                case 'decrement':
-                  counter -= (data.value || 1);
-                  break;
-                  
-                case 'reset':
-                  counter = data.value || 0;
-                  break;
-                  
-                case 'get':
-                  // 아무 것도 하지 않음
-                  break;
-              }
-              
-              // 결과 전송
-              self.postMessage({
-                type: 'STREAM_MESSAGE',
-                streamId,
-                data: { 
-                  counter, 
-                  action: data.action,
-                  timestamp: Date.now()
-                }
-              });
-            }
-          }
-          else if (type === 'STREAM_CLOSE') {
-            // 스트림 종료
-            activeStreams.delete(streamId);
-          }
-        }
-      };
-    `;
-
-      // Blob URL 생성
-      const workerBlob = new Blob([workerCode], {
-        type: "application/javascript",
-      });
-      const workerURL = URL.createObjectURL(workerBlob);
+      // TypeScript 워커 파일 경로 - 사전에 컴파일된 JavaScript 파일
+      const workerScriptPath = "../dist/examples/counter-stream-worker.js";
 
       // Worker 생성
-      const worker = new Worker(workerURL);
+      const worker = new Worker(workerScriptPath, {
+        type: "module",
+      });
 
       // UI 요소 참조
       const counterElement = document.getElementById("counter");
@@ -323,6 +241,12 @@
         }
       });
 
+      // 오류 처리
+      worker.addEventListener("error", (error) => {
+        log(`워커 오류: ${error.message}`);
+        console.error("워커 오류:", error);
+      });
+
       // 페이지 종료 시 정리
       window.addEventListener("beforeunload", () => {
         if (isConnected && streamId) {
@@ -335,9 +259,6 @@
 
         // Worker 종료
         worker.terminate();
-
-        // Blob URL 해제
-        URL.revokeObjectURL(workerURL);
       });
     </script>
   </body>
