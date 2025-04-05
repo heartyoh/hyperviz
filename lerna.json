@@ -1,15 +1,25 @@
 {
-  "packages": ["packages/*"],
+  "packages": [
+    "packages/*"
+  ],
   "npmClient": "yarn",
   "version": "0.1.0",
   "command": {
     "publish": {
       "skipNpm": false,
-      "ignoreChanges": ["**/*.md", "**/tests/**", "**/test/**"],
+      "ignoreChanges": [
+        "**/*.md",
+        "**/tests/**",
+        "**/test/**"
+      ],
       "conventionalCommits": true
     },
     "version": {
-      "allowBranch": ["main", "feature/*", "v*"],
+      "allowBranch": [
+        "main",
+        "feature/*",
+        "v*"
+      ],
       "conventionalCommits": true,
       "changelogPreset": {
         "name": "conventional-changelog-conventionalcommits",
@@ -50,7 +60,9 @@
             "hidden": false
           }
         ],
-        "issuePrefixes": ["#"],
+        "issuePrefixes": [
+          "#"
+        ],
         "issueUrlFormat": "{{host}}/{{owner}}/{{repository}}/issues/{{id}}",
         "commitUrlFormat": "{{host}}/{{owner}}/{{repository}}/commit/{{hash}}",
         "compareUrlFormat": "{{host}}/{{owner}}/{{repository}}/compare/{{previousTag}}...{{currentTag}}",
