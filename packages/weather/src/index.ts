@@ -4,6 +4,10 @@ export * from "./types/index.js";
 // 레이어 내보내기
 export { BaseWeatherLayer } from "./layers/base-layer.js";
 export { WindLayer } from "./layers/wind-layer.js";
+export { TemperatureLayer } from "./layers/temperature-layer.js";
+export { PrecipitationLayer } from "./layers/precipitation-layer.js";
+export { CloudLayer } from "./layers/cloud-layer.js";
+export { SolarLayer } from "./layers/solar-layer.js";
 // 향후 추가될 다른 레이어도 여기에서 내보냄
 
 // 서비스 내보내기 (구현되면)

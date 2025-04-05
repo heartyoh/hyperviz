@@ -2,65 +2,51 @@ import { Map } from "ol";
 import BaseLayer from "ol/layer/Base";
 import ImageLayer from "ol/layer/Image";
 import ImageCanvasSource from "ol/source/ImageCanvas";
-import { getVectorContext } from "ol/render";
-import { fromLonLat } from "ol/proj";
-import Layer from "ol/layer/Layer";
 import { Extent } from "ol/extent";
-import { Size } from "ol/size";
 
-import { BaseWeatherLayer, WeatherLayerOptions } from "./base-layer.js";
+import { BaseWeatherLayer } from "./base-layer.js";
 import {
   WeatherData,
   WeatherLayerType,
-  WindRenderOptions,
+  CloudRenderOptions,
 } from "../types/index.js";
 
 /**
- * 바람 시각화 레이어 옵션 - WindRenderOptions와 동일한 구조 사용
+ * 구름 시각화 레이어 옵션
  */
-export type WindLayerOptions = WindRenderOptions;
+export type CloudLayerOptions = CloudRenderOptions;
 
 /**
- * 바람 레이어 클래스
- * OpenLayers ImageLayer와 ImageCanvasSource를 사용하여 바람 흐름을 표현합니다.
+ * 구름 레이어 클래스
+ * OpenLayers ImageLayer와 ImageCanvasSource를 사용하여 구름 분포를 표현합니다.
  */
-export class WindLayer extends BaseWeatherLayer<WindLayerOptions> {
+export class CloudLayer extends BaseWeatherLayer<CloudLayerOptions> {
   private imageSource: ImageCanvasSource;
   private resizeTimer: number | null = null;
-  private imageCanvas?: HTMLCanvasElement;
-  private canvasContext?: CanvasRenderingContext2D;
-  private imageDataCache?: ImageBitmap;
-  private lastRenderTime = 0;
-  private pendingRender = false;
 
   /**
    * 생성자
-   * @param options 바람 레이어 옵션
+   * @param options 구름 레이어 옵션
    */
-  constructor(options: Partial<WindLayerOptions> = {}) {
+  constructor(options: Partial<CloudLayerOptions> = {}) {
     // 기본 옵션 정의
-    const defaultOptions: WindLayerOptions = {
+    const defaultOptions: CloudLayerOptions = {
       colorScale: [
-        "rgba(0, 0, 255, 0.5)",
-        "rgba(0, 255, 255, 0.5)",
-        "rgba(0, 255, 0, 0.5)",
-        "rgba(255, 255, 0, 0.5)",
-        "rgba(255, 0, 0, 0.5)",
+        "rgba(255, 255, 255, 0)", // 투명 (구름 없음)
+        "rgba(255, 255, 255, 0.3)", // 매우 옅은 구름
+        "rgba(240, 240, 240, 0.5)", // 옅은 구름
+        "rgba(220, 220, 220, 0.7)", // 중간 구름
+        "rgba(200, 200, 200, 0.8)", // 짙은 구름
+        "rgba(180, 180, 180, 0.9)", // 매우 짙은 구름
+        "rgba(150, 150, 150, 1.0)", // 완전 흐림
       ],
-      particleCount: 2000,
-      particleAge: 60,
-      lineWidth: 1,
-      velocityScale: 1 / 30,
-      minVelocity: 0,
-      maxVelocity: 10,
-      fadeOpacity: 0.92,
-      dropRate: 0.003,
-      dropRateBump: 0.01,
-      speedFactor: 0.25,
+      minCloud: 0, // 최소 구름 양 (%)
+      maxCloud: 100, // 최대 구름 양 (%)
+      opacity: 0.7,
     };
 
     // 사용자 옵션과 기본 옵션 병합
-    const mergedOptions: WindLayerOptions = { ...defaultOptions };
+    const mergedOptions: CloudLayerOptions = { ...defaultOptions };
     Object.keys(options).forEach((key) => {
       (mergedOptions as any)[key] = (options as any)[key];
     });
@@ -69,7 +55,6 @@ export class WindLayer extends BaseWeatherLayer<WindLayerOptions> {
 
     // ImageCanvas 소스 생성
     this.imageSource = new ImageCanvasSource({
-      // 타입스크립트가 Size를 [number, number]로 처리하지 못하는 경우를 위한 타입 단언
       canvasFunction: (
         extent: Extent,
         resolution: number,
@@ -87,17 +72,16 @@ export class WindLayer extends BaseWeatherLayer<WindLayerOptions> {
    * 레이어 타입 반환
    */
   getType(): WeatherLayerType {
-    return "wind";
+    return "cloud";
   }
 
   /**
    * OpenLayers 레이어 생성
    */
   createLayer(): BaseLayer {
-    // Layer 대신 ImageLayer를 사용하여 이미지 소스에 적합한 레이어 생성
     return new ImageLayer({
       source: this.imageSource,
-      zIndex: this.options.zIndex || 10,
+      zIndex: this.options.zIndex || 7,
     });
   }
 
@@ -166,42 +150,10 @@ export class WindLayer extends BaseWeatherLayer<WindLayerOptions> {
   }
 
   /**
-   * 애니메이션 프레임 처리
-   */
-  protected override animate(): void {
-    super.animate();
-
-    // 주기적으로 워커에 새 프레임 요청
-    const now = Date.now();
-    if (now - this.lastRenderTime > 100 && !this.pendingRender) {
-      this.lastRenderTime = now;
-      this.pendingRender = true;
-
-      this.renderWithWorker().finally(() => {
-        this.pendingRender = false;
-      });
-    }
-
-    // 맵이 있으면 맵 다시 그리기 요청 (애니메이션)
-    if (this.map) {
-      this.map.render();
-    }
-  }
-
-  /**
    * 레이어 제거 시 정리
    */
   override dispose(): void {
     super.dispose();
-
-    // 캐시된 이미지 정리
-    if (this.imageDataCache) {
-      this.imageDataCache.close();
-      this.imageDataCache = undefined;
-    }
-
-    this.imageCanvas = undefined;
-    this.canvasContext = undefined;
 
     if (this.resizeTimer) {
       clearTimeout(this.resizeTimer);

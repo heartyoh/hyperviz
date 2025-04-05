@@ -34,11 +34,42 @@
         padding: 1rem;
         text-align: center;
         box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
       }
 
       h1 {
         margin: 0;
         font-size: 1.8rem;
+        margin-bottom: 1rem;
+      }
+
+      .layer-menu {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+      }
+
+      .layer-button {
+        background-color: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+
+      .layer-button:hover {
+        background-color: rgba(255, 255, 255, 0.3);
+      }
+
+      .layer-button.active {
+        background-color: white;
+        color: var(--primary-color);
+        font-weight: bold;
       }
 
       #app {
@@ -124,6 +155,13 @@
   <body>
     <header>
       <h1>Hyperviz 날씨 시각화 예제</h1>
+      <div class="layer-menu">
+        <button class="layer-button" data-type="wind">바람</button>
+        <button class="layer-button" data-type="temperature">온도</button>
+        <button class="layer-button" data-type="precipitation">강수량</button>
+        <button class="layer-button" data-type="cloud">구름</button>
+        <button class="layer-button" data-type="solar">일사량</button>
+      </div>
     </header>
 
     <div id="app">
@@ -133,7 +171,7 @@
       </div>
     </div>
 
-    <footer>&copy; 2023 Hyperviz Weather. 모든 권리 보유.</footer>
+    <footer>&copy; Hyperviz Weather. All rights reserved.</footer>
 
     <!-- <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script> -->
 
@@ -150,6 +188,38 @@
           "crypto": "https://esm.sh/crypto-browserify@3.12.0"
         }
       }
+    </script>
+
+    <script>
+      // 현재 활성화된 레이어 타입 표시
+      function setActiveLayer() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const layerType = urlParams.get("type") || "wind";
+
+        // 모든 버튼에서 active 클래스 제거
+        document.querySelectorAll(".layer-button").forEach((btn) => {
+          btn.classList.remove("active");
+        });
+
+        // 선택된 레이어 타입 버튼에 active 클래스 추가
+        const activeButton = document.querySelector(
+          `.layer-button[data-type="${layerType}"]`
+        );
+        if (activeButton) {
+          activeButton.classList.add("active");
+        }
+      }
+
+      // 버튼 클릭 이벤트 처리
+      document.querySelectorAll(".layer-button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const layerType = btn.getAttribute("data-type");
+          window.location.href = `?type=${layerType}`;
+        });
+      });
+
+      // 페이지 로드 시 초기화
+      document.addEventListener("DOMContentLoaded", setActiveLayer);
     </script>
 
     <script type="module" src="../dist/examples/src/example.js"></script>

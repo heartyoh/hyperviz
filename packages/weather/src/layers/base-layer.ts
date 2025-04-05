@@ -47,6 +47,11 @@ export abstract class BaseWeatherLayer<
   protected animationFrameId?: number;
   protected needsUpdate: boolean = false;
   protected isAnimating: boolean = false;
+  // 캔버스 크기 정보를 별도로 저장
+  protected canvasWidth: number = 0;
+  protected canvasHeight: number = 0;
+  // 오프스크린 캔버스 사용 여부
+  protected usingOffscreenCanvas: boolean = false;
 
   /**
    * 생성자
@@ -74,9 +79,8 @@ export abstract class BaseWeatherLayer<
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
 
-    this.ctx = this.canvas.getContext("2d");
-
     // 워커 시스템 초기화
+    // 렌더링 컨텍스트를 얻기 전에 먼저 워커 시스템과 오프스크린 캔버스를 초기화
     this.initWorkers();
   }
 
@@ -87,8 +91,15 @@ export abstract class BaseWeatherLayer<
     try {
       this.workerPool = await initializeWorkerSystem();
       this.setupOffscreenCanvas();
+
+      // 오프스크린 캔버스를 사용할 수 없으면 일반 2D 컨텍스트를 생성
+      if (!this.offscreenCanvas) {
+        this.ctx = this.canvas.getContext("2d");
+      }
     } catch (err) {
       console.error("워커 시스템 초기화 실패:", err);
+      // 오류 발생 시 일반 2D 컨텍스트 사용
+      this.ctx = this.canvas.getContext("2d");
     }
   }
 
@@ -101,7 +112,15 @@ export abstract class BaseWeatherLayer<
     try {
       // 브라우저가 OffscreenCanvas를 지원하는지 확인
       if ("OffscreenCanvas" in window) {
-        this.offscreenCanvas = this.canvas.transferControlToOffscreen();
+        // canvas에 이미 렌더링 컨텍스트가 있는지 확인
+        if (!this.ctx) {
+          this.offscreenCanvas = this.canvas.transferControlToOffscreen();
+          this.usingOffscreenCanvas = true;
+        } else {
+          console.warn(
+            "이미 렌더링 컨텍스트가 있어 오프스크린 캔버스로 변환할 수 없습니다."
+          );
+        }
       }
     } catch (err) {
       console.error("오프스크린 캔버스 설정 실패:", err);
@@ -119,8 +138,8 @@ export abstract class BaseWeatherLayer<
       const taskData = {
         ...data,
         canvas: this.offscreenCanvas,
-        width: this.canvas.width,
-        height: this.canvas.height,
+        width: this.canvasWidth,
+        height: this.canvasHeight,
       };
 
       // 태스크 제출
@@ -192,9 +211,23 @@ export abstract class BaseWeatherLayer<
    * 레이어 리사이즈 처리
    */
   protected handleResize(width: number, height: number) {
-    if (this.canvas) {
+    // 크기가 변경되지 않았으면 건너뜀
+    if (this.canvasWidth === width && this.canvasHeight === height) {
+      return;
+    }
+
+    // 크기 정보 저장
+    this.canvasWidth = width;
+    this.canvasHeight = height;
+
+    // 오프스크린 캔버스를 사용하지 않는 경우에만 원본 캔버스 크기 변경
+    if (!this.usingOffscreenCanvas && this.canvas) {
       this.canvas.width = width;
       this.canvas.height = height;
+    } else if (this.usingOffscreenCanvas && this.offscreenCanvas) {
+      // 오프스크린 캔버스의 크기 설정
+      this.offscreenCanvas.width = width;
+      this.offscreenCanvas.height = height;
     }
   }
 
