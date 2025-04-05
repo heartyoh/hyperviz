@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>이미지 프로세서 & 캐시 데모</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui,
+          Roboto, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background-color: #f7f9fc;
+        padding: 20px;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        text-align: center;
+        margin-bottom: 20px;
+        color: #2563eb;
+      }
+      .desc {
+        margin-bottom: 30px;
+        text-align: center;
+        color: #666;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+      }
+      .control-group {
+        background: #f1f5f9;
+        padding: 15px;
+        border-radius: 8px;
+      }
+      h3 {
+        margin-bottom: 15px;
+        border-bottom: 1px solid #ccc;
+        padding-bottom: 8px;
+        color: #1e40af;
+      }
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+      }
+      select,
+      input {
+        width: 100%;
+        padding: 8px 12px;
+        margin-bottom: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      button {
+        background: #2563eb;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background 0.3s ease;
+      }
+      button:hover {
+        background: #1e40af;
+      }
+      button:disabled {
+        background: #93c5fd;
+        cursor: not-allowed;
+      }
+      .display {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+      }
+      .image-container {
+        background: #f8fafc;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+      }
+      .image-container img {
+        max-width: 100%;
+        max-height: 300px;
+        border-radius: 4px;
+        margin-bottom: 10px;
+      }
+      .cache-stats {
+        margin-top: 20px;
+        padding: 15px;
+        background: #f1f5f9;
+        border-radius: 8px;
+      }
+      .cache-control {
+        margin-top: 10px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      #log {
+        margin-top: 20px;
+        height: 200px;
+        overflow-y: auto;
+        background: #1e293b;
+        color: #e2e8f0;
+        padding: 10px;
+        border-radius: 4px;
+        font-family: monospace;
+        white-space: pre-wrap;
+      }
+      .log-entry {
+        margin-bottom: 5px;
+        line-height: 1.4;
+      }
+      .log-info {
+        color: #93c5fd;
+      }
+      .log-success {
+        color: #86efac;
+      }
+      .log-error {
+        color: #fca5a5;
+      }
+      .log-cache {
+        color: #fcd34d;
+      }
+      .log-time {
+        color: #a3a3a3;
+        font-size: 0.8em;
+      }
+      .progress-container {
+        margin-top: 10px;
+        background: #ddd;
+        border-radius: 4px;
+        height: 20px;
+        overflow: hidden;
+      }
+      .progress-bar {
+        background: #2563eb;
+        height: 100%;
+        width: 0;
+        transition: width 0.3s ease;
+      }
+      .badge {
+        display: inline-block;
+        background: #2563eb;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        margin-right: 5px;
+      }
+      .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        visibility: hidden;
+        opacity: 0;
+        transition: all 0.3s ease;
+      }
+      .modal.open {
+        visibility: visible;
+        opacity: 1;
+      }
+      .modal-content {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 800px;
+        max-height: 80vh;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>이미지 프로세서 &amp; 캐시 데모</h1>
+      <p class="desc">
+        IndexedDB 기반 이미지 캐싱을 활용한 효율적인 이미지 처리 시연
+      </p>
+
+      <div class="controls">
+        <div class="control-group">
+          <h3>이미지 입력</h3>
+          <input type="file" id="imageInput" accept="image/*" />
+          <button id="sampleImageBtn">샘플 이미지 사용</button>
+        </div>
+
+        <div class="control-group">
+          <h3>처리 옵션</h3>
+          <label for="width">너비 (픽셀)</label>
+          <input type="number" id="width" value="400" min="10" />
+
+          <label for="height">높이 (픽셀)</label>
+          <input type="number" id="height" value="300" min="10" />
+
+          <label for="maintainAspectRatio">비율 유지</label>
+          <select id="maintainAspectRatio">
+            <option value="true" selected>예</option>
+            <option value="false">아니오</option>
+          </select>
+
+          <label for="useDiscreteScales">이산 스케일 사용</label>
+          <select id="useDiscreteScales">
+            <option value="true">예 (최적화)</option>
+            <option value="false" selected>아니오 (정확한 크기)</option>
+          </select>
+
+          <label for="algorithm">스케일링 알고리즘</label>
+          <select id="algorithm">
+            <option value="nearest">최근접 이웃 (빠름)</option>
+            <option value="bilinear" selected>바이리니어 (중간)</option>
+            <option value="bicubic">바이큐빅 (고품질)</option>
+            <option value="lanczos">랑초스 (최고품질)</option>
+          </select>
+
+          <label for="quality">품질 (0-1)</label>
+          <input
+            type="number"
+            id="quality"
+            value="0.8"
+            min="0.1"
+            max="1"
+            step="0.1"
+          />
+
+          <label for="format">출력 포맷</label>
+          <select id="format">
+            <option value="image/jpeg" selected>JPEG</option>
+            <option value="image/png">PNG</option>
+            <option value="image/webp">WebP</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <h3>캐시 설정</h3>
+          <label for="cacheStorage">캐시 스토리지</label>
+          <select id="cacheStorage">
+            <option value="memory">메모리 캐시</option>
+            <option value="indexeddb" selected>IndexedDB 캐시</option>
+            <option value="hybrid">하이브리드 캐시</option>
+          </select>
+
+          <label for="useCache">캐시 사용</label>
+          <select id="useCache">
+            <option value="true" selected>예</option>
+            <option value="false">아니오</option>
+          </select>
+
+          <div class="cache-control">
+            <button id="clearCacheBtn">캐시 초기화</button>
+            <button id="viewStatsBtn">통계 보기</button>
+          </div>
+        </div>
+      </div>
+
+      <button id="processBtn" disabled>이미지 처리</button>
+      <div class="progress-container">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+
+      <div class="display">
+        <div class="image-container">
+          <h3>원본 이미지</h3>
+          <img id="originalImage" alt="원본 이미지" />
+          <div id="originalInfo"></div>
+        </div>
+        <div class="image-container">
+          <h3>처리된 이미지</h3>
+          <img id="processedImage" alt="처리된 이미지" />
+          <div id="processedInfo"></div>
+        </div>
+      </div>
+
+      <div class="cache-stats" id="cacheStats">
+        <h3>캐시 통계</h3>
+        <div id="statsContent"></div>
+      </div>
+
+      <div id="log"></div>
+    </div>
+
+    <div class="modal" id="statsModal">
+      <div class="modal-content">
+        <h2>캐시 통계 상세</h2>
+        <div id="modalStatsContent"></div>
+        <button id="closeModalBtn">닫기</button>
+      </div>
+    </div>
+
+    <!-- importmap 추가 -->
+    <script type="importmap">
+      {
+        "imports": {
+          "eventemitter3": "https://esm.sh/eventemitter3@5.0.1",
+          "crypto": "https://esm.sh/crypto-browserify@3.12.0"
+        }
+      }
+    </script>
+
+    <script type="module">
+      import { ImageProcessor, ImageProcessorEvent } from "../dist/index.js";
+      import {
+        CacheStorageType,
+        ScalingAlgorithm,
+        ImageFormat,
+      } from "../dist/imaging/types.js";
+
+      let imageProcessor;
+      let originalImageData = null;
+      let originalImageURL = null;
+
+      // DOM 요소
+      const imageInput = document.getElementById("imageInput");
+      const sampleImageBtn = document.getElementById("sampleImageBtn");
+      const processBtn = document.getElementById("processBtn");
+      const originalImage = document.getElementById("originalImage");
+      const processedImage = document.getElementById("processedImage");
+      const originalInfo = document.getElementById("originalInfo");
+      const processedInfo = document.getElementById("processedInfo");
+      const progressBar = document.getElementById("progressBar");
+      const logElement = document.getElementById("log");
+      const clearCacheBtn = document.getElementById("clearCacheBtn");
+      const viewStatsBtn = document.getElementById("viewStatsBtn");
+      const statsContent = document.getElementById("statsContent");
+      const statsModal = document.getElementById("statsModal");
+      const modalStatsContent = document.getElementById("modalStatsContent");
+      const closeModalBtn = document.getElementById("closeModalBtn");
+
+      // 이미지 프로세서 초기화
+      function initImageProcessor() {
+        // 기존 인스턴스 정리
+        if (imageProcessor) {
+          imageProcessor.dispose();
+        }
+
+        const cacheStorageType = document.getElementById("cacheStorage").value;
+        const useCache = document.getElementById("useCache").value === "true";
+
+        // 스토리지 타입 변환
+        let storageType;
+        switch (cacheStorageType) {
+          case "memory":
+            storageType = CacheStorageType.MEMORY;
+            break;
+          case "indexeddb":
+            storageType = CacheStorageType.INDEXED_DB;
+            break;
+          case "hybrid":
+            storageType = CacheStorageType.HYBRID;
+            break;
+          default:
+            storageType = CacheStorageType.MEMORY;
+        }
+
+        // 이미지 프로세서 생성
+        imageProcessor = new ImageProcessor({
+          useCache: useCache,
+          cacheStorageType: storageType,
+          cacheOptions: {
+            maxSize: 50,
+            expiryTime: 30 * 60 * 1000, // 30분
+            debug: true,
+          },
+          useDiscreteScales:
+            document.getElementById("useDiscreteScales").value === "true",
+          discreteScales: {
+            ORIGINAL: 1.0, // 원본 크기
+            MEDIUM: 0.5, // 원본의 50%
+            SMALL: 0.25, // 원본의 25%
+            TINY: 0.1, // 원본의 10%
+          },
+          workerUrl: "../dist/imaging/worker-scripts/image-worker.js", // 원래 경로로 복원
+          onReady: () => {
+            logInfo("이미지 프로세서 준비 완료");
+            updateStats();
+          },
+          onError: (error) => {
+            logError(`이미지 프로세서 오류: ${error.message}`);
+          },
+        });
+
+        // 이벤트 리스너 등록
+        imageProcessor.on(ImageProcessorEvent.CACHE_HIT, (data) => {
+          logCache(`캐시 히트: ${JSON.stringify(data)}`);
+        });
+
+        imageProcessor.on(ImageProcessorEvent.CACHE_MISS, (data) => {
+          logCache(`캐시 미스: ${JSON.stringify(data)}`);
+        });
+
+        imageProcessor.on(ImageProcessorEvent.TASK_START, (data) => {
+          logInfo(`작업 시작: ${data.taskId}`);
+          progressBar.style.width = "0%";
+        });
+
+        imageProcessor.on(ImageProcessorEvent.TASK_PROGRESS, (data) => {
+          progressBar.style.width = `${data.progress * 100}%`;
+        });
+
+        imageProcessor.on(ImageProcessorEvent.TASK_COMPLETE, (data) => {
+          logSuccess(`작업 완료: ${data.taskId}`);
+          progressBar.style.width = "100%";
+          updateStats();
+        });
+
+        imageProcessor.on(ImageProcessorEvent.TASK_FAIL, (data) => {
+          logError(`작업 실패: ${data.error}`);
+          progressBar.style.width = "0%";
+        });
+      }
+
+      // 이미지 처리 함수
+      async function processImage() {
+        if (!originalImageData) {
+          logError("처리할 이미지가 없습니다.");
+          return;
+        }
+
+        try {
+          // 옵션 설정
+          const options = {
+            width: parseInt(document.getElementById("width").value, 10),
+            height: parseInt(document.getElementById("height").value, 10),
+            maintainAspectRatio:
+              document.getElementById("maintainAspectRatio").value === "true",
+            useDiscreteScales:
+              document.getElementById("useDiscreteScales").value === "true",
+            quality: parseFloat(document.getElementById("quality").value),
+            algorithm: document.getElementById("algorithm").value,
+            format: document.getElementById("format").value,
+            devicePixelRatio: window.devicePixelRatio || 1,
+          };
+
+          // 소스 URL 정보 준비 - File 객체인 경우 파일명 활용, URL인 경우 그대로 사용
+          let sourceUrl = null;
+          if (originalImageData instanceof File) {
+            sourceUrl = originalImageData.name;
+          } else if (originalImageURL) {
+            sourceUrl = originalImageURL;
+          }
+
+          const startTime = performance.now();
+          // 워커를 통한 이미지 처리 - 소스 URL 정보 추가 전달
+          const result = await imageProcessor.scaleImage(
+            originalImageData,
+            options,
+            sourceUrl // 소스 URL 정보 전달
+          );
+          const endTime = performance.now();
+
+          // 처리 결과 표시
+          displayProcessedImage(result, endTime - startTime);
+        } catch (error) {
+          logError(`이미지 처리 오류: ${error.message}`);
+        }
+      }
+
+      // 처리된 이미지 표시
+      function displayProcessedImage(result, processingTime) {
+        const processedUrl =
+          typeof result.data === "string"
+            ? result.data
+            : URL.createObjectURL(
+                new Blob([result.data], {
+                  type: result.metadata.originalFormat,
+                })
+              );
+
+        processedImage.src = processedUrl;
+        processedImage.onload = () => {
+          if (typeof result.data !== "string") {
+            URL.revokeObjectURL(processedUrl);
+          }
+        };
+
+        // 처리 정보 표시
+        const fromCache = result.metadata.fromCache
+          ? '<span class="badge">캐시됨</span>'
+          : "";
+
+        // 이산 스케일 사용 시 배지 추가
+        const discreteScaleBadge =
+          document.getElementById("useDiscreteScales").value === "true"
+            ? '<span class="badge" style="background:#6ee7b7;">이산 스케일</span>'
+            : "";
+
+        processedInfo.innerHTML = `
+        <p>${fromCache} ${discreteScaleBadge} 크기: ${
+          result.metadata.processedWidth
+        } x ${result.metadata.processedHeight} 픽셀</p>
+        <p>원본: ${result.metadata.originalWidth} x ${
+          result.metadata.originalHeight
+        } 픽셀</p>
+        <p>처리 시간: ${result.metadata.processingTime.toFixed(2)}ms</p>
+        <p>총 시간: ${processingTime.toFixed(2)}ms</p>
+      `;
+
+        updateStats();
+      }
+
+      // 이미지 입력 처리
+      async function handleImageInput(file) {
+        if (!file) return;
+
+        try {
+          originalImageData = file;
+          // 원본 이미지 URL 저장 (파일 객체인 경우 파일명)
+          originalImageURL = file instanceof File ? file.name : null;
+
+          // 원본 이미지 표시
+          const originalUrl = URL.createObjectURL(file);
+          originalImage.src = originalUrl;
+
+          // 이미지 메타 정보 로드
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(originalUrl);
+
+            originalInfo.innerHTML = `
+            <p>크기: ${img.width} x ${img.height} 픽셀</p>
+            <p>타입: ${file.type}</p>
+            <p>크기: ${(file.size / 1024).toFixed(2)} KB</p>
+          `;
+
+            // 기본 처리 크기 설정
+            document.getElementById("width").value = img.width;
+            document.getElementById("height").value = img.height;
+
+            processBtn.disabled = false;
+          };
+
+          img.onerror = () => {
+            URL.revokeObjectURL(originalUrl);
+            logError("이미지 로드 실패");
+          };
+
+          img.src = originalUrl;
+        } catch (error) {
+          logError(`이미지 입력 오류: ${error.message}`);
+        }
+      }
+
+      // 샘플 이미지 로드
+      async function loadSampleImage() {
+        try {
+          const sampleImageUrl = "https://picsum.photos/800/600";
+          originalImageURL = sampleImageUrl; // 원본 URL 저장
+
+          const response = await fetch(sampleImageUrl);
+          if (!response.ok)
+            throw new Error("샘플 이미지를 가져오는데 실패했습니다.");
+
+          const blob = await response.blob();
+          handleImageInput(blob);
+        } catch (error) {
+          logError(`샘플 이미지 로드 오류: ${error.message}`);
+        }
+      }
+
+      // 캐시 통계 업데이트
+      function updateStats() {
+        if (!imageProcessor) return;
+
+        const stats = imageProcessor.getCacheStats();
+        if (!stats) {
+          statsContent.innerHTML = "<p>캐시가 비활성화되어 있습니다.</p>";
+          return;
+        }
+
+        statsContent.innerHTML = `
+        <p>메모리 캐시 항목: ${stats.size}</p>
+        <p>캐시 히트율: ${Math.round(
+          (stats.totalHits / (stats.totalHits + stats.totalMisses || 1)) * 100
+        )}%</p>
+      `;
+
+        // 상세 통계 모달
+        modalStatsContent.innerHTML = `
+        <table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">
+          <tr>
+            <th style="text-align:left; padding: 8px; border-bottom: 1px solid #ddd;">항목</th>
+            <th style="text-align:right; padding: 8px; border-bottom: 1px solid #ddd;">값</th>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">메모리 캐시 항목</td>
+            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
+              stats.size
+            }</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">메모리 캐시 히트</td>
+            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
+              stats.memoryHits
+            }</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">메모리 캐시 미스</td>
+            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
+              stats.memoryMisses
+            }</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">IndexedDB 캐시 히트</td>
+            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
+              stats.dbHits
+            }</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">IndexedDB 캐시 미스</td>
+            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
+              stats.dbMisses
+            }</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">캐시 제거 횟수</td>
+            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
+              stats.evictions
+            }</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">총 히트</td>
+            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
+              stats.totalHits
+            }</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">총 미스</td>
+            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
+              stats.totalMisses
+            }</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>히트율</strong></td>
+            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;"><strong>${Math.round(
+              (stats.totalHits / (stats.totalHits + stats.totalMisses || 1)) *
+                100
+            )}%</strong></td>
+          </tr>
+        </table>
+      `;
+      }
+
+      // 로그 함수
+      function log(message, className) {
+        const entry = document.createElement("div");
+        entry.className = `log-entry ${className}`;
+
+        const time = new Date().toLocaleTimeString();
+        entry.innerHTML = `<span class="log-time">[${time}]</span> ${message}`;
+
+        logElement.appendChild(entry);
+        logElement.scrollTop = logElement.scrollHeight;
+      }
+
+      function logInfo(message) {
+        log(message, "log-info");
+      }
+
+      function logSuccess(message) {
+        log(message, "log-success");
+      }
+
+      function logError(message) {
+        log(message, "log-error");
+      }
+
+      function logCache(message) {
+        log(message, "log-cache");
+      }
+
+      // 이벤트 리스너
+      imageInput.addEventListener("change", (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleImageInput(e.target.files[0]);
+        }
+      });
+
+      sampleImageBtn.addEventListener("click", loadSampleImage);
+      processBtn.addEventListener("click", processImage);
+
+      clearCacheBtn.addEventListener("click", async () => {
+        try {
+          await imageProcessor.clearCache();
+          logInfo("캐시 초기화 완료");
+          updateStats();
+        } catch (error) {
+          logError(`캐시 초기화 오류: ${error.message}`);
+        }
+      });
+
+      viewStatsBtn.addEventListener("click", () => {
+        updateStats();
+        statsModal.classList.add("open");
+      });
+
+      closeModalBtn.addEventListener("click", () => {
+        statsModal.classList.remove("open");
+      });
+
+      document
+        .getElementById("cacheStorage")
+        .addEventListener("change", initImageProcessor);
+      document
+        .getElementById("useCache")
+        .addEventListener("change", initImageProcessor);
+      document
+        .getElementById("useDiscreteScales")
+        .addEventListener("change", initImageProcessor);
+
+      // 초기화
+      initImageProcessor();
+      logInfo("이미지 프로세서 데모 초기화됨");
+    </script>
+  </body>
+</html>
