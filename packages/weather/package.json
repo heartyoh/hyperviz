@@ -16,6 +16,9 @@
   },
   "author": "",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@hyperviz/worker": "^0.1.2",
     "ol": "^9.2.4"
@@ -28,5 +31,5 @@
     "ts-jest": "^29.1.0",
     "typescript": "^5.0.0"
   },
-  "gitHead": "49ddba6aac8ac51c613f8601ff53410fb455fc14"
+  "gitHead": "3b543545a1bbe1315848ac0e0abe68fa9e08e9d2"
 }
