@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@hyperviz/worker": "^0.1.3",
-    "ol": "^9.2.4"
+    "ol": "^10.4.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
