@@ -2,7 +2,7 @@
 export * from "./types/index.js";
 
 // 레이어 내보내기
-export { BaseWeatherLayer } from "./layers/base-layer.js";
+export { BaseWeatherLayer } from "./layers/base-weather-layer.js";
 export { WindLayer } from "./layers/wind-layer.js";
 export { TemperatureLayer } from "./layers/temperature-layer.js";
 export { PrecipitationLayer } from "./layers/precipitation-layer.js";

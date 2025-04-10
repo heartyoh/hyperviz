@@ -1,4 +1,4 @@
-import { WeatherLayerOptions } from "../layers/base-layer";
+import { WeatherLayerOptions } from "../layers/base-weather-layer";
 import {
   WeatherData as OriginalWeatherData,
   WeatherGridData as OriginalWeatherGridData,

@@ -4,7 +4,7 @@ import ImageLayer from "ol/layer/Image";
 import ImageCanvasSource from "ol/source/ImageCanvas";
 import { Extent } from "ol/extent";
 
-import { BaseWeatherLayer } from "./base-layer.js";
+import { BaseWeatherLayer } from "./base-weather-layer.js";
 import {
   WeatherData,
   WeatherLayerType,

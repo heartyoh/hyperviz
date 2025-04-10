@@ -8,7 +8,7 @@ import Layer from "ol/layer/Layer";
 import { Extent } from "ol/extent";
 import { Size } from "ol/size";
 
-import { BaseWeatherLayer, WeatherLayerOptions } from "./base-layer.js";
+import { BaseWeatherLayer, WeatherLayerOptions } from "./base-weather-layer.js";
 import {
   WeatherData,
   WeatherLayerType,
