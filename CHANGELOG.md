@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.1.4](https://github.com/heartyoh/hyperviz/compare/v0.1.3...v0.1.4) (2025-04-10)
+
+
+### :bug: Bug Fix
+
+* file name for base-weather-layer ([029101f](https://github.com/heartyoh/hyperviz/commit/029101fee403c0351dd8dfcff7e91f1d5f45c418))
+* upgrade ol version ([7b02b97](https://github.com/heartyoh/hyperviz/commit/7b02b978ef8759d24ba2436e3b1105b1ee3e0cf6))
+
+
+
 ## [0.1.3](https://github.com/heartyoh/hyperviz/compare/v0.1.2...v0.1.3) (2025-04-05)
 
 
