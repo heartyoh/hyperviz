@@ -122,15 +122,17 @@ export class OffscreenCanvasManager extends EventEmitter {
       this.error("초기화 실패:", error);
       this.emit("error", error);
 
-      // 오류 발생 시 폴백 모드로 전환 시도
-      try {
-        this.useFallbackMode = true;
-        this.setupFallbackContext();
-        this.log("오류로 인해 폴백 모드로 전환되었습니다.");
-        this.emit("ready");
-      } catch (fallbackError) {
-        this.error("폴백 모드 설정 실패:", fallbackError);
-        this.emit("error", fallbackError);
+      // 오류 발생 시 폴백 모드로 전환 시도 (useFallback 옵션이 true인 경우에만)
+      if (this.options.useFallback === true) {
+        try {
+          this.useFallbackMode = true;
+          this.setupFallbackContext();
+          this.log("오류로 인해 폴백 모드로 전환되었습니다.");
+          this.emit("ready");
+        } catch (fallbackError) {
+          this.error("폴백 모드 설정 실패:", fallbackError);
+          this.emit("error", fallbackError);
+        }
       }
     }
   }
@@ -380,7 +382,10 @@ export class OffscreenCanvasManager extends EventEmitter {
       const workerUrl = this.options.workerUrl || this.getDefaultWorkerUrl();
       this.log(`워커 초기화 중: ${workerUrl}`);
 
-      this.worker = new Worker(workerUrl, { type: "module" });
+      this.worker = new Worker(
+        workerUrl,
+        this.options.workerOptions || { type: "module" }
+      );
 
       // 메시지 핸들러 설정
       this.worker.onmessage = this.handleWorkerMessage.bind(this);

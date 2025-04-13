@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>파티클 시스템 데모 - OffscreenCanvas</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background-color: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      h1 {
+        text-align: center;
+        color: #333;
+      }
+
+      .canvas-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 20px;
+        width: 100%;
+        max-width: 100%;
+        position: relative;
+      }
+
+      canvas {
+        border: 1px solid #ddd;
+        margin-bottom: 10px;
+        background-color: black;
+        max-width: 100%;
+        cursor: pointer;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 20px;
+        padding: 15px;
+        background-color: #f0f0f0;
+        border-radius: 5px;
+      }
+
+      .control-group {
+        display: flex;
+        flex-direction: column;
+        min-width: 120px;
+      }
+
+      label {
+        font-size: 14px;
+        margin-bottom: 5px;
+        color: #555;
+      }
+
+      button {
+        padding: 8px 15px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.3s;
+      }
+
+      button:hover {
+        background-color: #45a049;
+      }
+
+      button:active {
+        background-color: #3e8e41;
+      }
+
+      button.stop {
+        background-color: #f44336;
+      }
+
+      button.stop:hover {
+        background-color: #d32f2f;
+      }
+
+      input,
+      select {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+
+      input[type="range"] {
+        width: 100%;
+      }
+
+      input[type="color"] {
+        padding: 2px;
+        height: 30px;
+      }
+
+      .log-container {
+        border: 1px solid #ddd;
+        padding: 10px;
+        height: 150px;
+        overflow-y: auto;
+        font-family: monospace;
+        background-color: #f9f9f9;
+        border-radius: 4px;
+      }
+
+      .log-entry {
+        margin: 5px 0;
+        padding: 3px 5px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .log-entry.info {
+        color: #0066cc;
+      }
+
+      .log-entry.error {
+        color: #cc0000;
+      }
+
+      .log-entry.success {
+        color: #008800;
+      }
+
+      .color-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+
+      .color-input {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .no-support-message {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(255, 255, 255, 0.9);
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        text-align: center;
+        display: none;
+      }
+
+      .stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-top: 10px;
+        padding: 10px;
+        background-color: #e9f7ef;
+        border-radius: 4px;
+      }
+
+      .stat-item {
+        display: flex;
+        flex-direction: column;
+        min-width: 120px;
+      }
+
+      .stat-value {
+        font-weight: bold;
+        font-size: 20px;
+        color: #333;
+      }
+
+      .stat-label {
+        font-size: 12px;
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>파티클 시스템 데모 - OffscreenCanvas</h1>
+
+      <div class="canvas-container">
+        <canvas id="particleCanvas" width="800" height="600"></canvas>
+        <div class="no-support-message" id="noSupportMessage">
+          <h2>오류</h2>
+          <p>
+            이 브라우저는 OffscreenCanvas를 지원하지 않습니다. 최신 버전의
+            Chrome, Edge 또는 Firefox를 사용해 주세요.
+          </p>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="control-group">
+          <label for="effectType">파티클 효과</label>
+          <select id="effectType">
+            <option value="explosion">폭발 효과</option>
+            <option value="fountain">분수 효과</option>
+            <option value="snow">눈 효과</option>
+            <option value="confetti">색종이 효과</option>
+            <option value="fire">불 효과</option>
+            <option value="smoke">연기 효과</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label for="particleCount">파티클 수</label>
+          <input
+            type="range"
+            id="particleCount"
+            min="10"
+            max="500"
+            value="100"
+            step="10"
+          />
+          <span id="particleCountValue">100</span>
+        </div>
+
+        <div class="control-group">
+          <label for="gravity">중력</label>
+          <input
+            type="range"
+            id="gravity"
+            min="0"
+            max="0.5"
+            value="0.1"
+            step="0.01"
+          />
+          <span id="gravityValue">0.1</span>
+        </div>
+
+        <div class="control-group">
+          <label for="wind">바람</label>
+          <input
+            type="range"
+            id="wind"
+            min="-0.2"
+            max="0.2"
+            value="0"
+            step="0.01"
+          />
+          <span id="windValue">0</span>
+        </div>
+
+        <div class="control-group">
+          <label for="minSize">최소 크기</label>
+          <input
+            type="range"
+            id="minSize"
+            min="1"
+            max="10"
+            value="2"
+            step="0.5"
+          />
+          <span id="minSizeValue">2</span>
+        </div>
+
+        <div class="control-group">
+          <label for="maxSize">최대 크기</label>
+          <input
+            type="range"
+            id="maxSize"
+            min="5"
+            max="20"
+            value="8"
+            step="0.5"
+          />
+          <span id="maxSizeValue">8</span>
+        </div>
+
+        <div class="control-group">
+          <label for="minLife">최소 수명</label>
+          <input
+            type="range"
+            id="minLife"
+            min="10"
+            max="100"
+            value="30"
+            step="5"
+          />
+          <span id="minLifeValue">30</span>
+        </div>
+
+        <div class="control-group">
+          <label for="maxLife">최대 수명</label>
+          <input
+            type="range"
+            id="maxLife"
+            min="50"
+            max="200"
+            value="100"
+            step="5"
+          />
+          <span id="maxLifeValue">100</span>
+        </div>
+
+        <div class="control-group">
+          <label for="speed">속도</label>
+          <input
+            type="range"
+            id="speed"
+            min="0.5"
+            max="3"
+            value="1"
+            step="0.1"
+          />
+          <span id="speedValue">1</span>
+        </div>
+
+        <div class="control-group">
+          <label for="spread">확산</label>
+          <input
+            type="range"
+            id="spread"
+            min="0.5"
+            max="3"
+            value="1"
+            step="0.1"
+          />
+          <span id="spreadValue">1</span>
+        </div>
+
+        <div class="control-group">
+          <label>특수 효과</label>
+          <div>
+            <input type="checkbox" id="fadeOut" checked />
+            <label for="fadeOut">페이드 아웃</label>
+          </div>
+          <div>
+            <input type="checkbox" id="shrink" />
+            <label for="shrink">축소</label>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <button id="startButton">효과 시작</button>
+          <button id="stopButton" class="stop" style="margin-top: 5px">
+            효과 중지
+          </button>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="control-group" style="width: 100%">
+          <label>파티클 색상</label>
+          <div class="color-controls" id="colorControls">
+            <div class="color-input">
+              <input type="color" class="colorPicker" value="#ff0000" />
+              <button class="removeColor" style="padding: 2px 5px">X</button>
+            </div>
+            <div class="color-input">
+              <input type="color" class="colorPicker" value="#ffff00" />
+              <button class="removeColor" style="padding: 2px 5px">X</button>
+            </div>
+            <div class="color-input">
+              <input type="color" class="colorPicker" value="#00ff00" />
+              <button class="removeColor" style="padding: 2px 5px">X</button>
+            </div>
+            <button id="addColorButton" style="height: 30px; margin-top: 10px">
+              +
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat-item">
+          <div class="stat-value" id="particleCount">0</div>
+          <div class="stat-label">현재 파티클 수</div>
+        </div>
+
+        <div class="stat-item">
+          <div class="stat-value" id="fps">0</div>
+          <div class="stat-label">FPS</div>
+        </div>
+
+        <div class="stat-item">
+          <div class="stat-value" id="effectInfo">-</div>
+          <div class="stat-label">현재 효과</div>
+        </div>
+      </div>
+
+      <h3>로그</h3>
+      <div class="log-container" id="logContainer"></div>
+    </div>
+
+    <!-- importmap 추가 -->
+    <script type="importmap">
+      {
+        "imports": {
+          "eventemitter3": "https://esm.sh/eventemitter3@5.0.1",
+          "crypto": "https://esm.sh/crypto-browserify@3.12.0"
+        }
+      }
+    </script>
+
+    <script type="module">
+      // HyperViz 워커 모듈 가져오기
+      import {
+        OffscreenCanvasManager,
+        CanvasContextType,
+        CanvasCommandType,
+      } from "../dist/index.js";
+
+      // 상수 정의
+      const PARTICLE_COMMAND_START_EFFECT = "startEffect";
+      const PARTICLE_COMMAND_STOP_EFFECT = "stopEffect";
+      const PARTICLE_COMMAND_UPDATE_POSITION = "updatePosition";
+
+      // DOM 요소
+      const canvas = document.getElementById("particleCanvas");
+      const noSupportMessage = document.getElementById("noSupportMessage");
+      const logContainer = document.getElementById("logContainer");
+      const startButton = document.getElementById("startButton");
+      const stopButton = document.getElementById("stopButton");
+      const effectTypeSelect = document.getElementById("effectType");
+      const colorControls = document.getElementById("colorControls");
+      const addColorButton = document.getElementById("addColorButton");
+      const fpsElement = document.getElementById("fps");
+      const particleCountElement = document.getElementById("particleCount");
+      const effectInfoElement = document.getElementById("effectInfo");
+
+      // 파라미터 입력 요소들
+      const paramInputs = {
+        particleCount: document.getElementById("particleCount"),
+        gravity: document.getElementById("gravity"),
+        wind: document.getElementById("wind"),
+        minSize: document.getElementById("minSize"),
+        maxSize: document.getElementById("maxSize"),
+        minLife: document.getElementById("minLife"),
+        maxLife: document.getElementById("maxLife"),
+        speed: document.getElementById("speed"),
+        spread: document.getElementById("spread"),
+        fadeOut: document.getElementById("fadeOut"),
+        shrink: document.getElementById("shrink"),
+      };
+
+      // 파라미터 값 표시 요소들
+      const paramValueDisplays = {
+        particleCount: document.getElementById("particleCountValue"),
+        gravity: document.getElementById("gravityValue"),
+        wind: document.getElementById("windValue"),
+        minSize: document.getElementById("minSizeValue"),
+        maxSize: document.getElementById("maxSizeValue"),
+        minLife: document.getElementById("minLifeValue"),
+        maxLife: document.getElementById("maxLifeValue"),
+        speed: document.getElementById("speedValue"),
+        spread: document.getElementById("spreadValue"),
+      };
+
+      // 상태 변수
+      let canvasManager = null;
+      let isOffscreenSupported = true;
+      let devicePixelRatio = window.devicePixelRatio || 1;
+      let mouseX = 0;
+      let mouseY = 0;
+      let isRunning = false;
+      let frameCount = 0;
+      let lastFpsUpdateTime = 0;
+      let currentEffect = null;
+
+      // 로그 함수
+      function log(message, type = "info") {
+        console.log(`[파티클 데모] ${message}`);
+        const entry = document.createElement("div");
+        entry.classList.add("log-entry", type);
+        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        logContainer.appendChild(entry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+      }
+
+      // OffscreenCanvas 지원 확인
+      function checkOffscreenCanvasSupport() {
+        const testCanvas = document.createElement("canvas");
+        return (
+          typeof testCanvas.transferControlToOffscreen === "function" &&
+          typeof OffscreenCanvas !== "undefined"
+        );
+      }
+
+      // 초기화 함수
+      async function initialize() {
+        isOffscreenSupported = checkOffscreenCanvasSupport();
+
+        if (!isOffscreenSupported) {
+          log("브라우저가 OffscreenCanvas를 지원하지 않습니다.", "error");
+          noSupportMessage.style.display = "block";
+          return false;
+        }
+
+        try {
+          log("파티클 시스템 데모 초기화 중...");
+
+          // OffscreenCanvas 매니저 생성
+          canvasManager = new OffscreenCanvasManager({
+            canvas: canvas,
+            contextType: CanvasContextType.CONTEXT_WEBGL2,
+            workerUrl:
+              "../dist/offcanvas/worker-scripts/particle-system-worker.js",
+            workerOptions: {
+              type: "module",
+            },
+            debug: true,
+            useFallback: false,
+            contextAttributes: {
+              alpha: true,
+            },
+          });
+
+          // 이벤트 리스너 설정
+          canvasManager.on("ready", () => {
+            log("OffscreenCanvas 매니저가 준비되었습니다.", "success");
+            setupEventListeners();
+            updateSizes();
+          });
+
+          canvasManager.on("error", (error) => {
+            log(`오류 발생: ${error.message || "알 수 없는 오류"}`, "error");
+            console.error("Canvas Manager 오류:", error);
+          });
+
+          canvasManager.on("renderComplete", () => {
+            updateFPS();
+          });
+
+          canvasManager.on("effectStarted", (data) => {
+            currentEffect = data.effectType;
+            effectInfoElement.textContent = getEffectName(currentEffect);
+            log(
+              `${getEffectName(data.effectType)} 효과가 시작되었습니다.`,
+              "success"
+            );
+          });
+
+          canvasManager.on("effectStopped", () => {
+            log("효과가 중지되었습니다.", "info");
+          });
+
+          canvasManager.on("updatePosition", (data) => {
+            console.log("updatePosition", data);
+          });
+
+          canvasManager.on("message", (data) => {
+            if (data.type === "particleStats" && data.count !== undefined) {
+              particleCountElement.textContent = data.count;
+            }
+          });
+
+          canvasManager.on("init", () => {
+            log("캔버스가 초기화되었습니다.", "success");
+          });
+
+          // 워커 이벤트 추가
+          // canvasManager.on("event", handleWorkerEvent);
+
+          log("초기화가 완료되었습니다.");
+          return true;
+        } catch (error) {
+          log(`초기화 중 오류 발생: ${error.message}`, "error");
+          console.error("초기화 오류:", error);
+          return false;
+        }
+      }
+
+      // 워커 이벤트 처리
+      // function handleWorkerEvent(event) {
+      //   if (!event || typeof event !== "object") {
+      //     console.warn("유효하지 않은 워커 이벤트:", event);
+      //     return;
+      //   }
+
+      //   const { type, ...data } = event;
+
+      //   // 이벤트 타입이 없으면 처리하지 않음
+      //   if (!type) {
+      //     console.warn("이벤트 타입이 없는 워커 이벤트:", event);
+      //     return;
+      //   }
+
+      //   switch (type) {
+      //     // case "initialized":
+      //     //   log("캔버스가 초기화되었습니다.", "success");
+      //     //   break;
+
+      //     case "resized":
+      //       log(
+      //         `캔버스 크기가 조정되었습니다: ${data.width}x${data.height}`,
+      //         "info"
+      //       );
+      //       break;
+
+      //     case "animationStopped":
+      //       log("애니메이션이 종료되었습니다.", "info");
+      //       isRunning = false;
+      //       currentEffect = null;
+      //       effectInfoElement.textContent = "-";
+      //       break;
+
+      //     case "particleStats":
+      //       if (data.count !== undefined) {
+      //         particleCountElement.textContent = data.count;
+      //       }
+      //       break;
+
+      //     case "error":
+      //       log(`워커 오류: ${data.message || "알 수 없는 오류"}`, "error");
+      //       console.error("워커 오류:", data);
+      //       break;
+
+      //     default:
+      //       console.debug("처리되지 않은 워커 이벤트:", type, data);
+      //       break;
+      //   }
+      // }
+
+      // 이벤트 리스너 설정
+      function setupEventListeners() {
+        // 시작 버튼
+        startButton.addEventListener("click", startEffect);
+
+        // 중지 버튼
+        stopButton.addEventListener("click", stopEffect);
+
+        // 캔버스 리사이즈 처리
+        window.addEventListener("resize", debounce(updateSizes, 200));
+
+        // 캔버스 마우스 이벤트
+        canvas.addEventListener("mousemove", handleMouseMove);
+
+        // 캔버스 터치 이벤트
+        canvas.addEventListener("touchmove", handleTouchMove);
+
+        // 색상 추가 버튼
+        addColorButton.addEventListener("click", addColorInput);
+
+        // 파라미터 입력 이벤트 설정
+        for (const [param, input] of Object.entries(paramInputs)) {
+          if (input.type === "range") {
+            input.addEventListener("input", () => {
+              // 값 표시 업데이트
+              if (paramValueDisplays[param]) {
+                paramValueDisplays[param].textContent = input.value;
+              }
+            });
+          }
+        }
+
+        // 초기 파라미터 값 표시 업데이트
+        for (const [param, display] of Object.entries(paramValueDisplays)) {
+          if (paramInputs[param]) {
+            display.textContent = paramInputs[param].value;
+          }
+        }
+      }
+
+      // 파티클 효과 시작
+      async function startEffect() {
+        if (!canvasManager) {
+          log("캔버스 매니저가 초기화되지 않았습니다.", "error");
+          return;
+        }
+
+        try {
+          // 색상 배열 얻기
+          const colors = Array.from(
+            document.querySelectorAll(".colorPicker")
+          ).map((input) => input.value);
+
+          // 효과 옵션
+          const options = {
+            particleCount: parseInt(paramInputs.particleCount.value),
+            gravity: parseFloat(paramInputs.gravity.value),
+            wind: parseFloat(paramInputs.wind.value),
+            minSize: parseFloat(paramInputs.minSize.value),
+            maxSize: parseFloat(paramInputs.maxSize.value),
+            minLife: parseInt(paramInputs.minLife.value),
+            maxLife: parseInt(paramInputs.maxLife.value),
+            speed: parseFloat(paramInputs.speed.value),
+            spread: parseFloat(paramInputs.spread.value),
+            fadeOut: paramInputs.fadeOut.checked,
+            shrink: paramInputs.shrink.checked,
+            colors: colors,
+            x: mouseX,
+            y: mouseY,
+          };
+
+          log(`${getEffectName(effectTypeSelect.value)} 효과 시작 시도 중...`);
+
+          // 명령 패턴 사용
+          const result = await canvasManager.sendCommand({
+            type: PARTICLE_COMMAND_START_EFFECT,
+            params: {
+              effectType: effectTypeSelect.value,
+              options: options,
+            },
+          });
+
+          if (result) {
+            isRunning = true;
+            log(
+              `${getEffectName(effectTypeSelect.value)} 효과 시작됨`,
+              "success"
+            );
+          } else {
+            log(
+              `효과 시작 실패: ${result ? result.error : "알 수 없는 오류"}`,
+              "error"
+            );
+          }
+        } catch (error) {
+          console.error("효과 시작 오류:", error);
+          log(`효과 시작 오류: ${error.message || "알 수 없는 오류"}`, "error");
+        }
+      }
+
+      // 파티클 효과 중지
+      async function stopEffect() {
+        if (!canvasManager || !isRunning) {
+          return;
+        }
+
+        try {
+          log("효과 중지 요청 중...");
+
+          // 명령 패턴 사용
+          const result = await canvasManager.sendCommand({
+            type: PARTICLE_COMMAND_STOP_EFFECT,
+          });
+
+          if (result) {
+            log("효과 중지 완료", "info");
+          } else {
+            log(
+              `효과 중지 실패: ${result ? result.error : "알 수 없는 오류"}`,
+              "error"
+            );
+          }
+        } catch (error) {
+          console.error("효과 중지 오류:", error);
+          log(`효과 중지 오류: ${error.message || "알 수 없는 오류"}`, "error");
+        }
+      }
+
+      // 캔버스 크기 업데이트
+      async function updateSizes() {
+        if (!canvasManager) return;
+
+        try {
+          const rect = canvas.getBoundingClientRect();
+          const displayWidth = rect.width;
+          const displayHeight = rect.height;
+          const width = displayWidth * devicePixelRatio;
+          const height = displayHeight * devicePixelRatio;
+
+          // 캔버스 크기 조정
+          const result = await canvasManager.sendCommand({
+            type: CanvasCommandType.RESIZE,
+            params: {
+              width: width,
+              height: height,
+            },
+          });
+
+          if (result) {
+            log(
+              `캔버스 크기 조정됨: ${result.width}x${result.height} (devicePixelRatio: ${devicePixelRatio})`,
+              "info"
+            );
+          } else {
+            log(
+              `캔버스 크기 조정 실패: ${
+                result ? result.error : "알 수 없는 오류"
+              }`,
+              "error"
+            );
+          }
+        } catch (error) {
+          console.error("크기 조정 오류:", error);
+          log(
+            `캔버스 크기 조정 오류: ${error.message || "알 수 없는 오류"}`,
+            "error"
+          );
+        }
+      }
+
+      // 마우스 이벤트 처리
+      function handleMouseMove(e) {
+        if (!canvasManager) return;
+
+        const rect = canvas.getBoundingClientRect();
+        mouseX = (e.clientX - rect.left) * devicePixelRatio;
+        mouseY = (e.clientY - rect.top) * devicePixelRatio;
+
+        if (isRunning) {
+          updateEffectPosition(mouseX, mouseY);
+        }
+      }
+
+      // 터치 이벤트 처리
+      function handleTouchMove(e) {
+        if (!canvasManager || e.touches.length === 0) return;
+
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const touch = e.touches[0];
+        mouseX = (touch.clientX - rect.left) * devicePixelRatio;
+        mouseY = (touch.clientY - rect.top) * devicePixelRatio;
+
+        if (isRunning) {
+          updateEffectPosition(mouseX, mouseY);
+        }
+      }
+
+      // 이펙트 위치 업데이트 (성능 최적화를 위해 디바운스 사용)
+      const updateEffectPosition = debounce(async (x, y) => {
+        if (!canvasManager || !isRunning) return;
+
+        try {
+          await canvasManager.sendCommand({
+            type: PARTICLE_COMMAND_UPDATE_POSITION,
+            params: {
+              mouseX: x,
+              mouseY: y,
+            },
+          });
+        } catch (error) {
+          // 위치 업데이트 오류는 로그에 기록하지 않음 (너무 많은 로그 방지)
+          console.debug("위치 업데이트 오류:", error);
+        }
+      }, 16); // 약 60fps에 맞춤
+
+      // 색상 입력 추가
+      function addColorInput() {
+        const colorCount = document.querySelectorAll(".colorPicker").length;
+        if (colorCount >= 8) return; // 최대 8개 색상으로 제한
+
+        const colorInput = document.createElement("div");
+        colorInput.className = "color-input";
+
+        const picker = document.createElement("input");
+        picker.type = "color";
+        picker.className = "colorPicker";
+        picker.value = getRandomColor();
+
+        const removeBtn = document.createElement("button");
+        removeBtn.className = "removeColor";
+        removeBtn.textContent = "X";
+        removeBtn.style = "padding: 2px 5px;";
+        removeBtn.addEventListener("click", () => {
+          if (document.querySelectorAll(".colorPicker").length > 1) {
+            colorInput.remove();
+          }
+        });
+
+        colorInput.appendChild(picker);
+        colorInput.appendChild(removeBtn);
+
+        colorControls.insertBefore(colorInput, addColorButton);
+      }
+
+      // 기존 색상 입력에 이벤트 연결
+      function setupColorInputs() {
+        document.querySelectorAll(".removeColor").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            if (document.querySelectorAll(".colorPicker").length > 1) {
+              btn.parentElement.remove();
+            }
+          });
+        });
+      }
+
+      // 랜덤 색상 생성
+      function getRandomColor() {
+        return (
+          "#" +
+          Math.floor(Math.random() * 16777215)
+            .toString(16)
+            .padStart(6, "0")
+        );
+      }
+
+      // FPS 업데이트
+      function updateFPS() {
+        frameCount++;
+        const now = performance.now();
+        const elapsed = now - lastFpsUpdateTime;
+
+        if (elapsed >= 1000) {
+          // 1초마다 FPS 업데이트
+          const fps = Math.round((frameCount * 1000) / elapsed);
+          fpsElement.textContent = fps.toString();
+          frameCount = 0;
+          lastFpsUpdateTime = now;
+        }
+      }
+
+      // 효과 이름 가져오기
+      function getEffectName(type) {
+        const names = {
+          explosion: "폭발",
+          fountain: "분수",
+          snow: "눈",
+          confetti: "색종이",
+          fire: "불",
+          smoke: "연기",
+        };
+        return names[type] || type;
+      }
+
+      // 디바운스 유틸리티
+      function debounce(func, wait) {
+        let timeout;
+        return function () {
+          const context = this,
+            args = arguments;
+          clearTimeout(timeout);
+          timeout = setTimeout(() => func.apply(context, args), wait);
+        };
+      }
+
+      // 이벤트 위임으로 색상 제거 버튼 핸들링
+      colorControls.addEventListener("click", (e) => {
+        if (e.target.classList.contains("removeColor")) {
+          if (document.querySelectorAll(".colorPicker").length > 1) {
+            e.target.parentElement.remove();
+          }
+        }
+      });
+
+      // 초기 로드 시 실행
+      document.addEventListener("DOMContentLoaded", async () => {
+        try {
+          log("파티클 시스템 데모 시작");
+          setupColorInputs();
+          const initialized = await initialize();
+
+          if (!initialized) {
+            log("초기화 실패", "error");
+          }
+        } catch (e) {
+          console.error("초기화 오류:", e);
+          log("초기화 중 예기치 않은 오류 발생: " + e.message, "error");
+        }
+      });
+    </script>
+  </body>
+</html>

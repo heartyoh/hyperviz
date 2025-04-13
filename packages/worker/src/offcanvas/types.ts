@@ -231,20 +231,55 @@ export interface WebGLOperation {
  * OffscreenCanvas 매니저 옵션
  */
 export interface OffscreenCanvasManagerOptions {
-  /** 캔버스 요소 또는 선택자 */
+  /**
+   * 캔버스 요소 또는 선택자
+   */
   canvas: HTMLCanvasElement | string;
-  /** 컨텍스트 타입 */
+
+  /**
+   * 컨텍스트 유형 (2d 또는 webgl2)
+   */
   contextType?: CanvasContextType;
-  /** 컨텍스트 속성 */
-  contextAttributes?: any;
-  /** 워커 URL */
+
+  /**
+   * 워커 URL (기본값: 기본 내장 워커)
+   */
   workerUrl?: string;
-  /** 워커 수 */
+
+  /**
+   * 워커 옵션
+   */
+  workerOptions?: WorkerOptions;
+
+  /**
+   * 워커 개수
+   */
   workerCount?: number;
-  /** 자동 리사이즈 */
+
+  /**
+   * 컨텍스트 속성
+   */
+  contextAttributes?: Record<string, any>;
+
+  /**
+   * 자동 크기 조정 활성화 여부
+   */
   autoResize?: boolean;
-  /** 디버그 모드 */
+
+  /**
+   * 디버그 모드 활성화 여부
+   */
   debug?: boolean;
+
+  /**
+   * 폴백 모드 사용 여부
+   */
+  useFallback?: boolean;
+
+  /**
+   * 폴백 렌더링 활성화 여부
+   */
+  enableFallbackRendering?: boolean;
 }
 
 /**
