@@ -1,167 +1,203 @@
 /**
- * 이미지 처리 메인 클래스
- * WorkerAdapter를 활용한 이미지 처리 기능 제공
+ * Image Processor Main Class
+ * Provides image processing capabilities using WorkerAdapter
  */
 import { EventEmitter } from "eventemitter3";
 import { WorkerAdapter } from "../core/worker-adapter.js";
 import {
   CacheStorageType,
   ImageProcessingOptions,
-  ImageProcessingResult,
+  ProcessingResult,
   ImageTaskType,
-  ScalingAlgorithm,
   ImageFormat,
-} from "./types.js";
-import { ImageCache, ImageCacheOptions } from "./image-cache.js";
-import * as crypto from "crypto";
-import {
-  TaskPriority,
-  TaskStatus,
+  ImageSource,
   WorkerType,
-  IWorkerPool,
-} from "../types/index.js";
+  ImageProcessorEvents,
+  CacheOptions,
+  TaskRetryEvent,
+} from "./types.js";
+import { ImageCache } from "./image-cache.js";
+import * as crypto from "crypto";
+import { TaskStatus, TaskPriority } from "../types/index.js";
+import { TimeoutManager, TimeoutStatus } from "../core/timeout-manager.js";
 
 /**
- * 이미지 프로세서 이벤트 타입
- */
-export enum ImageProcessorEvent {
-  /** 준비 완료 */
-  READY = "ready",
-  /** 오류 발생 */
-  ERROR = "error",
-  /** 작업 시작 */
-  TASK_START = "taskStart",
-  /** 작업 진행 */
-  TASK_PROGRESS = "taskProgress",
-  /** 작업 완료 */
-  TASK_COMPLETE = "taskComplete",
-  /** 작업 실패 */
-  TASK_FAIL = "taskFail",
-  /** 캐시 히트 */
-  CACHE_HIT = "cacheHit",
-  /** 캐시 미스 */
-  CACHE_MISS = "cacheMiss",
-}
-
-/**
- * 이산 스케일 상수 - 가장 많이 사용되는 크기로 제한하여 캐시 최적화
+ * Discrete Scale Constants - Limit to most commonly used sizes for cache optimization
  */
 export const DISCRETE_SCALES = {
-  ORIGINAL: 1.0, // 원본 크기
-  MEDIUM: 0.5, // 원본의 50%
-  SMALL: 0.25, // 원본의 25%
-  TINY: 0.1, // 원본의 10%
+  ORIGINAL: 1.0, // Original size
+  MEDIUM: 0.5, // 50% of original
+  SMALL: 0.25, // 25% of original
+  TINY: 0.1, // 10% of original
 };
 
 /**
- * 이미지 프로세서 옵션
+ * Image Processor Options
  */
 export interface ImageProcessorOptions {
-  /** 워커 스크립트 URL (기본값: 내장 URL) */
+  /** Worker script URL (default: built-in URL) */
   workerUrl?: string;
-  /** 작업 제한 시간 (ms) */
+  /** Task timeout (ms) */
   timeout?: number;
-  /** 초기화 완료 콜백 */
+  /** Ready callback */
   onReady?: () => void;
-  /** 오류 발생 콜백 */
+  /** Error callback */
   onError?: (error: Error) => void;
-  /** 캐시 사용 여부 (기본값: true) */
+  /** Whether to use cache (default: true) */
   useCache?: boolean;
-  /** 캐시 스토리지 유형 (기본값: MEMORY) */
+  /** Cache storage type (default: MEMORY) */
   cacheStorageType?: CacheStorageType;
-  /** 캐시 옵션 */
-  cacheOptions?: ImageCacheOptions;
-  /** 이산 스케일 사용 여부 */
+  /** Cache options */
+  cacheOptions?: CacheOptions;
+  /** Whether to use discrete scales */
   useDiscreteScales?: boolean;
-  /** 커스텀 이산 스케일 값 */
+  /** Custom discrete scale values */
   discreteScales?: Record<string, number>;
+  /** Maximum retry count for timeouts */
+  maxRetries?: number;
+  /** Base delay for retry backoff (ms) */
+  retryDelayBase?: number;
+  /** Max jitter for retry delay (ms) */
+  maxJitter?: number;
+  /** Maximum backoff delay (ms) */
+  maxBackoffDelay?: number;
 }
 
 /**
- * 이미지 프로세서 클래스
- * 워커 스레드를 활용한 이미지 처리 기능 제공
+ * Image Processor Class
+ * Provides image processing functionality using worker threads
  */
 export class ImageProcessor extends EventEmitter {
-  /** 워커 URL */
+  /** Worker URL */
   private workerUrl: string = "";
-  /** 워커 */
+  /** Worker */
   private worker: WorkerAdapter;
-  /** 준비 완료 여부 */
+  /** Ready state */
   private isReady: boolean = false;
-  /** 작업 ID 카운터 */
+  /** Task ID counter */
   private taskIdCounter: number = 0;
-  /** 작업 제한 시간 */
+  /** Task timeout */
   private timeout: number;
-  /** 작업 제한 시간 타이머 */
-  private timeoutTimers: Map<string, NodeJS.Timeout> = new Map();
-  /** 이미지 캐시 */
+  /** Maximum retry count */
+  private maxRetries: number;
+  /** Base delay for retry */
+  private retryDelayBase: number;
+  /** Max jitter for retry delay */
+  private maxJitter: number;
+  /** Maximum backoff delay */
+  private maxBackoffDelay: number;
+  /** Timeout manager */
+  private timeoutManager: TimeoutManager;
+  /** Running tasks and their timeouts */
+  private runningTasks: Map<string, { timeoutId?: number; startTime: number }> =
+    new Map();
+  /** Image cache */
   private cache: ImageCache | null = null;
-  /** 캐시 사용 여부 */
+  /** Whether to use cache */
   private useCache: boolean;
-  /** 캐시 스토리지 유형 */
+  /** Cache storage type */
   private cacheStorageType: CacheStorageType;
-  /** 이산 스케일 사용 여부 */
+  /** Whether to use discrete scales */
   private useDiscreteScales: boolean;
-  /** 이산 스케일 값 */
+  /** Discrete scale values */
   private discreteScales: Record<string, number>;
 
   /**
-   * 이미지 프로세서 생성자
-   * @param options 초기화 옵션
+   * Image processor constructor
+   * @param options Initialization options
    */
   constructor(options: ImageProcessorOptions = {}) {
     super();
 
-    // 옵션 설정
-    this.timeout = options.timeout || 30000; // 기본 30초
-    this.useCache = options.useCache !== false; // 기본적으로 캐시 활성화
+    // Set options
+    this.timeout = options.timeout || 30000; // Default 30 seconds
+    this.maxRetries = options.maxRetries || 3; // Default 3 retries
+    this.retryDelayBase = options.retryDelayBase || 2000; // Default 2 seconds
+    this.maxJitter = options.maxJitter || 500; // Default 500ms jitter
+    this.maxBackoffDelay = options.maxBackoffDelay || 30000; // Default 30 seconds max delay
+    this.useCache = options.useCache !== false; // Cache enabled by default
     this.cacheStorageType = options.cacheStorageType || CacheStorageType.MEMORY;
 
-    // 이산 스케일 설정
+    // Initialize timeout manager with retry options
+    this.timeoutManager = new TimeoutManager({
+      maxRetries: this.maxRetries,
+      retryDelayBase: this.retryDelayBase,
+      maxJitter: this.maxJitter,
+      maxBackoffDelay: this.maxBackoffDelay,
+      debug: false,
+    });
+
+    // Discrete scale settings
     this.useDiscreteScales = options.useDiscreteScales || false;
     this.discreteScales = options.discreteScales || DISCRETE_SCALES;
 
-    // 이벤트 핸들러 등록
+    // Register event handlers
     if (options.onReady) {
-      this.on(ImageProcessorEvent.READY, options.onReady);
+      this.on(ImageProcessorEvents.READY, options.onReady);
     }
 
     if (options.onError) {
-      this.on(ImageProcessorEvent.ERROR, options.onError);
+      this.on(ImageProcessorEvents.ERROR, options.onError);
     }
 
-    // 캐시 초기화 (사용 설정된 경우)
+    // Initialize cache (if enabled)
     if (this.useCache) {
-      const cacheOptions: ImageCacheOptions = {
+      const cacheOptions: CacheOptions = {
         ...(options.cacheOptions || {}),
         storageType: this.cacheStorageType,
       };
       this.cache = new ImageCache(cacheOptions);
     }
 
-    // 워커 URL 설정 (사용자 지정 또는 기본값)
+    // Set worker URL (custom or default)
     const workerUrl = options.workerUrl || this.getDefaultWorkerUrl();
 
-    // 워커 어댑터 생성
+    // Create worker adapter
     this.worker = new WorkerAdapter({
       id: `image-processor-${Date.now()}`,
       url: workerUrl,
     });
 
-    // 워커 메시지 핸들러 등록
+    // Register worker message handlers
     this.worker.on("message", this.handleWorkerMessage.bind(this));
     this.worker.on("error", this.handleWorkerError.bind(this));
   }
 
   /**
-   * 기본 워커 URL 생성
-   * @returns 기본 워커 URL
+   * 타임아웃 값 가져오기
+   * @returns 현재 설정된 타임아웃 값(ms)
+   */
+  public getTimeout(): number {
+    return this.timeout;
+  }
+
+  /**
+   * 타임아웃 값 설정하기
+   * @param value 새 타임아웃 값(ms)
+   */
+  public setTimeout(value: number): void {
+    if (value > 0) {
+      this.timeout = value;
+    }
+  }
+
+  /**
+   * 타임아웃 매니저 통계 가져오기
+   * @returns 타임아웃 관련 통계
+   */
+  public getTimeoutStats(): any {
+    return this.timeoutManager.getStats();
+  }
+
+  /**
+   * Generate default worker URL
+   * @returns Default worker URL
    */
   private getDefaultWorkerUrl(): string {
-    // 워커 스크립트 내용
+    // Worker script content
     const workerScript = `
-      // 이미지 워커 스크립트 내용이 문자열로 변환되어 포함됨
-      // 실제 구현에서는 빌드 과정에서 worker-scripts/image-worker.ts 파일을 문자열로 변환하여 삽입
+      // Image worker script content converted to string
+      // In actual implementation, the worker-scripts/image-worker.ts file would be converted to a string during build
       self.addEventListener('message', (event) => {
         const { type, taskId, data } = event.data;
         
@@ -177,59 +213,112 @@ export class ImageProcessor extends EventEmitter {
       self.postMessage({ type: 'workerReady', timestamp: Date.now() });
     `;
 
-    // Blob URL 생성
+    // Create Blob URL
     const blob = new Blob([workerScript], { type: "application/javascript" });
     return URL.createObjectURL(blob);
   }
 
   /**
-   * 워커 메시지 핸들러
-   * @param message 워커로부터 받은 메시지
+   * Handles messages received from the worker
+   * Processes different message types and emits corresponding events
+   *
+   * @param event - Message event from worker containing data payload
    */
-  private handleWorkerMessage(message: any): void {
-    if (!message || !message.type) return;
+  private handleWorkerMessage(event: MessageEvent | any): void {
+    // Extract message data
+    const data = event.data || event;
 
-    switch (message.type) {
-      // 워커 준비 완료
-      case "workerReady":
+    if (!data) {
+      return;
+    }
+
+    try {
+      // Ignore timestamp-only messages (browser initialization)
+      if (data.timestamp && Object.keys(data).length === 1) {
+        return;
+      }
+
+      // Special handling for worker ready messages (various formats)
+      if (
+        data.type === "workerReady" ||
+        data.status === "ready" ||
+        (data.data && data.data.status === "ready")
+      ) {
         this.isReady = true;
-        this.emit(ImageProcessorEvent.READY);
-        break;
+        this.emit(ImageProcessorEvents.READY);
+        return;
+      }
 
-      // 작업 진행 상황
-      case "taskProgress":
-        // 타임아웃 타이머 갱신
-        this.resetTaskTimeout(message.taskId);
+      // Validate message type
+      const type = data.type;
+      if (!type) {
+        console.warn(
+          `[ImageProcessor] Message missing type field: ${JSON.stringify(data)}`
+        );
+        return;
+      }
 
-        if (message.progress !== undefined) {
-          this.emit(ImageProcessorEvent.TASK_PROGRESS, {
-            taskId: message.taskId,
-            progress: message.progress,
-          });
-        }
-        break;
+      // Process message by type
+      switch (type) {
+        case "taskProgress":
+          if (data.taskId) {
+            this.resetTaskTimeout(data.taskId);
+            this.emit(ImageProcessorEvents.TASK_PROGRESS, data);
+          }
+          break;
 
-      // 작업 완료
-      case "taskCompleted":
-        // 타임아웃 타이머 제거
-        this.clearTaskTimeout(message.taskId);
+        case "taskCompleted":
+          if (data.taskId) {
+            this.clearTaskTimeout(data.taskId);
+            this.emit(ImageProcessorEvents.TASK_COMPLETE, data);
 
-        this.emit(ImageProcessorEvent.TASK_COMPLETE, {
-          taskId: message.taskId,
-          result: message.result,
-        });
-        break;
+            // 작업 완료시 실행 시간 기록 (성능 측정용)
+            const taskInfo = this.runningTasks.get(data.taskId);
+            if (taskInfo) {
+              const duration = Date.now() - taskInfo.startTime;
+              this.runningTasks.delete(data.taskId);
+              this.emit("taskDuration", { taskId: data.taskId, duration });
+            }
+          }
+          break;
 
-      // 작업 실패
-      case "taskFailed":
-        // 타임아웃 타이머 제거
-        this.clearTaskTimeout(message.taskId);
+        case "taskFailed":
+          if (data.taskId) {
+            this.clearTaskTimeout(data.taskId);
+            this.emit(ImageProcessorEvents.TASK_FAIL, data);
 
-        this.emit(ImageProcessorEvent.TASK_FAIL, {
-          taskId: message.taskId,
-          error: message.error,
-        });
-        break;
+            // 작업 실패시에도 실행 시간 기록
+            const taskInfo = this.runningTasks.get(data.taskId);
+            if (taskInfo) {
+              const duration = Date.now() - taskInfo.startTime;
+              this.runningTasks.delete(data.taskId);
+              this.emit("taskFailure", {
+                taskId: data.taskId,
+                duration,
+                error: data.error,
+              });
+            }
+          }
+          break;
+
+        case "cacheHit":
+          this.emit(ImageProcessorEvents.CACHE_HIT, data);
+          break;
+
+        case "cacheMiss":
+          this.emit(ImageProcessorEvents.CACHE_MISS, data);
+          break;
+
+        case "pong":
+          // Ping response - ignore
+          break;
+
+        default:
+          // Ignore unknown message types
+          break;
+      }
+    } catch (error) {
+      console.error("[ImageProcessor] Error processing message:", error);
     }
   }
 
@@ -238,7 +327,7 @@ export class ImageProcessor extends EventEmitter {
    * @param error 오류 객체
    */
   private handleWorkerError(error: Error): void {
-    this.emit(ImageProcessorEvent.ERROR, error);
+    this.emit(ImageProcessorEvents.ERROR, error);
   }
 
   /**
@@ -250,19 +339,53 @@ export class ImageProcessor extends EventEmitter {
   }
 
   /**
-   * 작업 타임아웃 설정
+   * 작업 타임아웃 설정 (재시도 기능 포함)
    * @param taskId 작업 ID
    */
   private setTaskTimeout(taskId: string): void {
-    const timer = setTimeout(() => {
-      this.emit(ImageProcessorEvent.TASK_FAIL, {
-        taskId,
-        error: `Task timeout after ${this.timeout}ms`,
-      });
-      this.timeoutTimers.delete(taskId);
-    }, this.timeout);
+    if (!taskId) {
+      console.warn("[ImageProcessor] Cannot set timeout for undefined taskId");
+      return;
+    }
 
-    this.timeoutTimers.set(taskId, timer);
+    const taskInfo = {
+      startTime: Date.now(),
+      timeoutId: undefined as number | undefined,
+    };
+
+    // 재시도 기능이 있는 타임아웃 설정
+    const timeoutId = this.timeoutManager.setWithRetry(
+      taskId,
+      () => {
+        const task = this.worker.getTask(taskId);
+        if (task && task.status === TaskStatus.RUNNING) {
+          this.emit(ImageProcessorEvents.TASK_FAIL, {
+            taskId,
+            error: `Task timeout after all retries (${this.maxRetries}) exceeded`,
+            retriesAttempted: this.maxRetries,
+          });
+
+          // 모든 재시도가 실패하면 실행 중인 작업 정리
+          this.runningTasks.delete(taskId);
+        }
+        return false; // 이 값으로 성공/실패 여부를 판단 (false = 실패)
+      },
+      (retryCount: number, nextDelay: number) => {
+        // 재시도 콜백 - 재시도 이벤트 발생
+        this._handleTaskRetry({
+          taskId,
+          retryCount,
+          maxRetries: this.maxRetries,
+          nextDelay,
+          error: "작업 타임아웃",
+        });
+      },
+      this.timeout
+    );
+
+    // 작업 정보 저장 - 타입 명시
+    taskInfo.timeoutId = timeoutId;
+    this.runningTasks.set(taskId, taskInfo);
   }
 
   /**
@@ -270,7 +393,24 @@ export class ImageProcessor extends EventEmitter {
    * @param taskId 작업 ID
    */
   private resetTaskTimeout(taskId: string): void {
-    this.clearTaskTimeout(taskId);
+    if (!taskId) {
+      console.warn(
+        "[ImageProcessor] Cannot reset timeout for undefined taskId"
+      );
+      return;
+    }
+
+    const taskInfo = this.runningTasks.get(taskId);
+    if (!taskInfo || !taskInfo.timeoutId) {
+      // 작업 정보나 타임아웃 ID가 없으면 새로 설정
+      this.setTaskTimeout(taskId);
+      return;
+    }
+
+    // 진행 중인 작업의 타임아웃 재설정
+    this.timeoutManager.clear(String(taskInfo.timeoutId));
+
+    // 새 타임아웃 설정
     this.setTaskTimeout(taskId);
   }
 
@@ -279,11 +419,83 @@ export class ImageProcessor extends EventEmitter {
    * @param taskId 작업 ID
    */
   private clearTaskTimeout(taskId: string): void {
-    const timer = this.timeoutTimers.get(taskId);
-    if (timer) {
-      clearTimeout(timer);
-      this.timeoutTimers.delete(taskId);
+    if (!taskId) {
+      console.warn(
+        "[ImageProcessor] Cannot clear timeout for undefined taskId"
+      );
+      return;
     }
+
+    const taskInfo = this.runningTasks.get(taskId);
+    if (taskInfo && taskInfo.timeoutId) {
+      this.timeoutManager.clear(String(taskInfo.timeoutId));
+    }
+
+    // 실행 중인 작업 목록에서 제거
+    this.runningTasks.delete(taskId);
+  }
+
+  /**
+   * 이미지 크기 및 형식에 따라 타임아웃 동적 조정
+   * @param imageSize 이미지 크기(바이트)
+   * @param format 이미지 형식
+   * @returns 조정된 타임아웃 값(ms)
+   */
+  public adjustTimeoutBasedOnImageSize(
+    imageSize: number,
+    format?: ImageFormat
+  ): number {
+    let adjustedTimeout = this.timeout;
+
+    // 기본값: 1MB당 5초 추가
+    const sizeMultiplier = 5000; // 5초/MB
+    const sizeMB = imageSize / (1024 * 1024);
+
+    // 이미지 크기에 비례하여 타임아웃 증가
+    const sizeAdjustment = Math.min(sizeMB * sizeMultiplier, 60000); // 최대 60초 추가
+
+    // 형식에 따른 추가 조정
+    let formatAdjustment = 0;
+    if (format) {
+      switch (format) {
+        case ImageFormat.PNG:
+          // 무손실 압축 형식은 처리 시간이 더 오래 걸림
+          formatAdjustment = 5000; // 5초 추가
+          break;
+        case ImageFormat.WEBP:
+          // 압축 효율이 좋은 형식
+          formatAdjustment = -2000; // 2초 감소
+          break;
+        default:
+          formatAdjustment = 0;
+          break;
+      }
+    }
+
+    // 최종 타임아웃 (최소 5초)
+    adjustedTimeout = Math.max(
+      5000,
+      this.timeout + sizeAdjustment + formatAdjustment
+    );
+
+    // 로깅 (디버깅용)
+    console.log(
+      `[ImageProcessor] Adjusted timeout: ${adjustedTimeout}ms (base: ${this.timeout}ms, size: +${sizeAdjustment}ms, format: ${formatAdjustment}ms)`
+    );
+
+    return adjustedTimeout;
+  }
+
+  /**
+   * 모든 진행 중인 작업의 타임아웃 정리
+   */
+  private clearAllTimeouts(): void {
+    for (const [taskId, taskInfo] of this.runningTasks.entries()) {
+      if (taskInfo.timeoutId) {
+        this.timeoutManager.clear(String(taskInfo.timeoutId));
+      }
+    }
+    this.runningTasks.clear();
   }
 
   /**
@@ -293,10 +505,15 @@ export class ImageProcessor extends EventEmitter {
    * @returns 해시 문자열
    */
   private generateImageId(
-    imageData: Blob | ArrayBuffer | ImageData,
+    imageData: Blob | ArrayBuffer | ImageData | string,
     sourceUrl?: string
   ): string {
     try {
+      // 이미지 데이터가 문자열인 경우 (URL)
+      if (typeof imageData === "string") {
+        return `url-${imageData}`;
+      }
+
       // 소스 URL이 제공된 경우 파일명 추출
       if (sourceUrl) {
         // URL의 파일명 부분 추출
@@ -398,19 +615,18 @@ export class ImageProcessor extends EventEmitter {
    * @param imageData 원본 이미지 데이터 (Blob, ArrayBuffer, ImageData)
    * @param options 처리 옵션
    * @param sourceUrl 이미지 소스 URL (선택사항) - 캐시 키 생성에 사용
-   * @returns Promise<ImageProcessingResult>
+   * @returns Promise<ProcessingResult>
    */
   async scaleImage(
-    imageData: Blob | ArrayBuffer | ImageData,
+    imageData: ImageSource,
     options: ImageProcessingOptions = {},
     sourceUrl?: string
-  ): Promise<ImageProcessingResult> {
+  ): Promise<ProcessingResult> {
     // 기본 옵션 설정
     const defaultOptions: ImageProcessingOptions = {
       width: 0,
       height: 0,
       maintainAspectRatio: true,
-      algorithm: ScalingAlgorithm.BILINEAR,
       quality: 0.8,
       format: ImageFormat.JPEG,
       useDiscreteScales: this.useDiscreteScales,
@@ -418,73 +634,6 @@ export class ImageProcessor extends EventEmitter {
 
     // 옵션 병합
     const finalOptions = { ...defaultOptions, ...options };
-
-    // 이미지 크기 정보 추출 (ImageData 또는 Blob에서)
-    let originalWidth = 0;
-    let originalHeight = 0;
-
-    if (imageData instanceof ImageData) {
-      originalWidth = imageData.width;
-      originalHeight = imageData.height;
-    } else if (
-      imageData instanceof Blob &&
-      finalOptions.width &&
-      finalOptions.height
-    ) {
-      // Blob에서는 직접 크기를 알 수 없으므로 옵션에서 제공된 값 사용
-      originalWidth = finalOptions.width;
-      originalHeight = finalOptions.height;
-    }
-
-    // 이산 스케일 적용 (옵션 활성화 시)
-    if (
-      finalOptions.useDiscreteScales &&
-      originalWidth > 0 &&
-      originalHeight > 0
-    ) {
-      // 이산 스케일 계산
-      const discreteScale = calculateDiscreteScale(
-        originalWidth,
-        originalHeight,
-        finalOptions.width,
-        finalOptions.height,
-        this.discreteScales,
-        finalOptions.devicePixelRatio || 1
-      );
-
-      // 최종 너비와 높이 계산
-      if (finalOptions.width || finalOptions.height) {
-        // 비율에 맞게 크기 조정
-        if (finalOptions.width && !finalOptions.height) {
-          finalOptions.width = Math.round(originalWidth * discreteScale);
-        } else if (!finalOptions.width && finalOptions.height) {
-          finalOptions.height = Math.round(originalHeight * discreteScale);
-        } else {
-          // 둘 다 있는 경우 유지 비율에 따라 조정
-          if (finalOptions.maintainAspectRatio) {
-            const aspectRatio = originalWidth / originalHeight;
-
-            // 타입 안전성 보장: finalOptions.width와 finalOptions.height를 임시 변수에 저장
-            const currentWidth = finalOptions.width || 0;
-            const currentHeight = finalOptions.height || 0;
-
-            if (currentWidth / currentHeight > aspectRatio) {
-              // 높이 맞춤
-              finalOptions.height = Math.round(originalHeight * discreteScale);
-              finalOptions.width = Math.round(
-                finalOptions.height * aspectRatio
-              );
-            } else {
-              // 너비 맞춤
-              finalOptions.width = Math.round(originalWidth * discreteScale);
-              finalOptions.height = Math.round(
-                finalOptions.width / aspectRatio
-              );
-            }
-          }
-        }
-      }
-    }
 
     // 이미지 ID 생성 (캐싱용)
     const imageId = this.generateImageId(imageData, sourceUrl);
@@ -495,13 +644,13 @@ export class ImageProcessor extends EventEmitter {
         const cachedResult = await this.cache.get(imageId, finalOptions);
 
         if (cachedResult) {
-          this.emit(ImageProcessorEvent.CACHE_HIT, {
+          this.emit(ImageProcessorEvents.CACHE_HIT, {
             imageId,
             options: finalOptions,
           });
           return cachedResult;
         } else {
-          this.emit(ImageProcessorEvent.CACHE_MISS, {
+          this.emit(ImageProcessorEvents.CACHE_MISS, {
             imageId,
             options: finalOptions,
           });
@@ -520,18 +669,13 @@ export class ImageProcessor extends EventEmitter {
 
         // 작업 ID 생성
         const taskId = this.generateTaskId();
-        // 이미지 데이터가 Blob인 경우 ArrayBuffer로 변환
-        let processedImageData: ArrayBuffer | ImageData = imageData as
-          | ArrayBuffer
-          | ImageData;
-
-        if (imageData instanceof Blob) {
-          processedImageData = await imageData.arrayBuffer();
-        }
 
         // 진행 상황 업데이트 핸들러
         const progressHandler = (data: any) => {
           if (data.taskId === taskId && data.progress !== undefined) {
+            // 타임아웃 리셋 (진행 상황이 있다면 작업 중임)
+            this.resetTaskTimeout(taskId);
+
             // 사용자 지정 진행 콜백이 있는 경우 호출
             if (finalOptions.onProgress) {
               finalOptions.onProgress(data.progress);
@@ -542,6 +686,9 @@ export class ImageProcessor extends EventEmitter {
         // 작업 완료 핸들러
         const completeHandler = async (data: any) => {
           if (data.taskId === taskId) {
+            // 타임아웃 제거 (작업 완료)
+            this.clearTaskTimeout(taskId);
+
             // 캐시에 결과 저장 (활성화된 경우)
             if (this.useCache && this.cache && data.result) {
               try {
@@ -559,6 +706,9 @@ export class ImageProcessor extends EventEmitter {
         // 작업 실패 핸들러
         const failHandler = (data: any) => {
           if (data.taskId === taskId) {
+            // 타임아웃 제거 (작업 실패)
+            this.clearTaskTimeout(taskId);
+
             cleanup();
             reject(new Error(data.error));
           }
@@ -566,18 +716,18 @@ export class ImageProcessor extends EventEmitter {
 
         // 리소스 정리 함수
         const cleanup = () => {
-          this.off(ImageProcessorEvent.TASK_PROGRESS, progressHandler);
-          this.off(ImageProcessorEvent.TASK_COMPLETE, completeHandler);
-          this.off(ImageProcessorEvent.TASK_FAIL, failHandler);
+          this.off(ImageProcessorEvents.TASK_PROGRESS, progressHandler);
+          this.off(ImageProcessorEvents.TASK_COMPLETE, completeHandler);
+          this.off(ImageProcessorEvents.TASK_FAIL, failHandler);
         };
 
         // 이벤트 리스너 등록
-        this.on(ImageProcessorEvent.TASK_PROGRESS, progressHandler);
-        this.on(ImageProcessorEvent.TASK_COMPLETE, completeHandler);
-        this.on(ImageProcessorEvent.TASK_FAIL, failHandler);
+        this.on(ImageProcessorEvents.TASK_PROGRESS, progressHandler);
+        this.on(ImageProcessorEvents.TASK_COMPLETE, completeHandler);
+        this.on(ImageProcessorEvents.TASK_FAIL, failHandler);
 
         // 태스크 시작 이벤트 발생
-        this.emit(ImageProcessorEvent.TASK_START, {
+        this.emit(ImageProcessorEvents.TASK_START, {
           taskId,
           options: finalOptions,
         });
@@ -585,22 +735,57 @@ export class ImageProcessor extends EventEmitter {
         // 작업 타임아웃 설정
         this.setTaskTimeout(taskId);
 
-        // 워커에 작업 전송
+        // Transferable 객체 준비
+        const transferables: Transferable[] = [];
+
+        // 원본 이미지 데이터 (변경 가능)
+        let processableImageData: any = imageData;
+
+        // imageData가 Blob, ArrayBuffer, ImageData인 경우 처리
+        if (typeof Blob !== "undefined" && imageData instanceof Blob) {
+          try {
+            const arrayBuffer = await imageData.arrayBuffer();
+            processableImageData = arrayBuffer;
+            transferables.push(arrayBuffer);
+          } catch (error) {
+            console.warn("Blob을 ArrayBuffer로 변환 중 오류:", error);
+            // 오류 발생하면 원본 Blob 사용
+          }
+        } else if (
+          typeof ArrayBuffer !== "undefined" &&
+          imageData instanceof ArrayBuffer
+        ) {
+          transferables.push(imageData);
+        } else if (
+          typeof ImageData !== "undefined" &&
+          typeof imageData === "object" &&
+          imageData !== null &&
+          "data" in imageData &&
+          "buffer" in imageData.data &&
+          imageData.data.buffer instanceof ArrayBuffer
+        ) {
+          transferables.push(imageData.data.buffer);
+        }
+
+        // 워커에 작업 전송 - transferables 활용
+        const taskData = {
+          type: ImageTaskType.SCALE,
+          taskId,
+          imageData: processableImageData,
+          options: finalOptions,
+        };
+
         this.worker.startTask({
           id: taskId,
           type: "image_task",
           workerType: WorkerType.IMAGE,
-          data: {
-            type: ImageTaskType.SCALE,
-            taskId,
-            imageData: processedImageData,
-            options: finalOptions,
-          },
+          data: taskData,
           status: TaskStatus.QUEUED,
           priority: TaskPriority.NORMAL,
           submittedAt: Date.now(),
           options: {
             priority: TaskPriority.NORMAL,
+            transferables: transferables.length > 0 ? transferables : undefined,
           },
         });
       } catch (error) {
@@ -687,13 +872,13 @@ export class ImageProcessor extends EventEmitter {
    */
   async setCacheEnabled(
     enabled: boolean,
-    options?: ImageCacheOptions
+    options?: CacheOptions
   ): Promise<void> {
     this.useCache = enabled;
 
     if (enabled) {
       if (!this.cache) {
-        const cacheOptions: ImageCacheOptions = {
+        const cacheOptions: CacheOptions = {
           ...(options || {}),
           storageType: options?.storageType || this.cacheStorageType,
         };
@@ -724,10 +909,9 @@ export class ImageProcessor extends EventEmitter {
   /**
    * 리소스 정리
    */
-  dispose(): void {
-    // 작업 타임아웃 타이머 정리
-    this.timeoutTimers.forEach((timer) => clearTimeout(timer));
-    this.timeoutTimers.clear();
+  terminate(): void {
+    // 타임아웃 타이머 정리
+    this.timeoutManager.clearAll();
 
     // 캐시 정리
     if (this.cache) {
@@ -739,23 +923,35 @@ export class ImageProcessor extends EventEmitter {
     if (this.worker) {
       this.worker.terminate();
     }
+  }
 
-    // 이벤트 리스너 제거
-    this.removeAllListeners();
+  /**
+   * 작업 재시도 처리 핸들러
+   * @param data 재시도 이벤트 데이터
+   * @private
+   */
+  private _handleTaskRetry(data: {
+    taskId: string;
+    retryCount: number;
+    maxRetries: number;
+    nextDelay: number;
+    error?: string;
+  }): void {
+    this.emit(ImageProcessorEvents.TASK_RETRY, data);
   }
 }
 
 /**
- * 이산 스케일 계산 함수
- * 주어진 크기와 원본 크기를 기반으로 가장 적합한 이산 스케일을 반환합니다.
+ * Discrete Scale Calculation Function
+ * Returns the most suitable discrete scale based on given size and original size
  *
- * @param originalWidth 원본 이미지 너비
- * @param originalHeight 원본 이미지 높이
- * @param targetWidth 대상 너비
- * @param targetHeight 대상 높이
- * @param discreteScales 이산 스케일 값
- * @param devicePixelRatio 기기 픽셀 비율
- * @returns 계산된 이산 스케일 값
+ * @param originalWidth Original image width
+ * @param originalHeight Original image height
+ * @param targetWidth Target width
+ * @param targetHeight Target height
+ * @param discreteScales Discrete scale values
+ * @param devicePixelRatio Device pixel ratio
+ * @returns Calculated discrete scale value
  */
 export function calculateDiscreteScale(
   originalWidth: number,
@@ -765,37 +961,37 @@ export function calculateDiscreteScale(
   discreteScales: Record<string, number> = DISCRETE_SCALES,
   devicePixelRatio: number = 1
 ): number {
-  // 대상 크기가 지정되지 않은 경우 원본 크기 사용
+  // If target size is not specified, use original size
   if (!targetWidth && !targetHeight) {
     return discreteScales.ORIGINAL;
   }
 
-  // 화면 크기가 지정된 경우 비율 계산
+  // If screen size is specified, calculate ratio
   let displayRatio: number;
 
   if (targetWidth && targetHeight) {
-    // 너비와 높이 모두 지정된 경우 더 작은 비율 사용
+    // If both width and height are specified, use smaller ratio
     const widthRatio = (targetWidth / originalWidth) * devicePixelRatio;
     const heightRatio = (targetHeight / originalHeight) * devicePixelRatio;
     displayRatio = Math.min(widthRatio, heightRatio);
   } else if (targetWidth) {
-    // 너비만 지정된 경우
+    // If only width is specified
     displayRatio = (targetWidth / originalWidth) * devicePixelRatio;
   } else {
-    // 높이만 지정된 경우
+    // If only height is specified
     displayRatio = (targetHeight / originalHeight) * devicePixelRatio;
   }
 
-  // 이산 스케일 값 결정
+  // Determine discrete scale value
   const scales = Object.values(discreteScales).sort((a, b) => b - a);
 
-  // 계산된 비율보다 작거나 같은 가장 큰 이산 스케일 찾기
+  // Find the largest discrete scale that is less than or equal to calculated ratio
   for (const scale of scales) {
     if (displayRatio >= scale) {
       return scale;
     }
   }
 
-  // 모든 스케일보다 작은 경우 가장 작은 스케일 반환
+  // If all scales are smaller, return the smallest scale
   return scales[scales.length - 1];
 }

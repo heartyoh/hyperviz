@@ -1,6 +1,6 @@
 /**
- * 이벤트 허브
- * 워커 풀 이벤트 관리
+ * 이벤트 허브 모듈
+ * 메시지 브로커 역할을 담당하며, 다양한 컴포넌트 간의 이벤트 라우팅을 관리합니다.
  */
 
 import { EventEmitter } from "eventemitter3";
@@ -10,26 +10,45 @@ import { Task, TaskStatus } from "../types/index.js";
  * 태스크 이벤트 타입
  */
 export enum TaskEventType {
+  /** 태스크 큐에 추가됨 */
   QUEUED = "taskQueued",
+  /** 태스크 시작됨 */
   STARTED = "taskStarted",
-  COMPLETED = "taskCompleted",
-  FAILED = "taskFailed",
-  CANCELLED = "taskCancelled",
+  /** 태스크 진행 중 */
   PROGRESS = "taskProgress",
+  /** 태스크 완료됨 */
+  COMPLETED = "taskCompleted",
+  /** 태스크 실패함 */
+  FAILED = "taskFailed",
+  /** 태스크 취소됨 */
+  CANCELLED = "taskCancelled",
+  /** 태스크 재시도함 */
   RETRY = "taskRetry",
-  TIMEOUT = "taskTimeout",
 }
 
 /**
  * 워커 이벤트 타입
  */
 export enum WorkerEventType {
+  /** 워커 생성됨 */
   CREATED = "workerCreated",
-  ERROR = "workerError",
+  /** 워커 종료됨 */
   EXIT = "workerExit",
-  TERMINATING = "workerTerminating",
-  RESTART = "workerRestart",
-  STATE_CHANGE = "workerStateChange",
+  /** 워커 오류 발생함 */
+  ERROR = "workerError",
+  /** 워커 상태 변경됨 */
+  STATUS_CHANGE = "workerStatusChange",
+}
+
+/**
+ * 코어 이벤트 타입
+ */
+export enum CoreEventType {
+  INIT = "systemInit",
+  SHUTDOWN = "systemShutdown",
+  CONFIG_CHANGE = "configChange",
+  ERROR = "systemError",
+  WARNING = "systemWarning",
 }
 
 /**
@@ -41,6 +60,9 @@ export interface IEventHub {
 
   /** 워커 이벤트 발행 */
   emitWorkerEvent(eventType: WorkerEventType, data: WorkerEventData): void;
+
+  /** 코어 이벤트 발행 */
+  emitCoreEvent(eventType: CoreEventType, data: any): void;
 
   /** 이벤트 리스너 등록 */
   on<E extends string>(event: E, listener: (...args: any[]) => void): this;
@@ -99,43 +121,49 @@ export interface WorkerEventData {
  */
 export class EventHub extends EventEmitter implements IEventHub {
   /**
+   * 생성자
+   */
+  constructor() {
+    super();
+  }
+
+  /**
    * 태스크 이벤트 발행
-   * @param eventType 이벤트 타입
+   * @param type 이벤트 타입
    * @param data 이벤트 데이터
    */
-  emitTaskEvent(eventType: TaskEventType, data: TaskEventData): void {
-    // 이벤트 메타데이터 추가
-    const enhancedData = {
-      ...data,
-      timestamp: Date.now(),
-      eventType,
-    };
+  emitTaskEvent(type: TaskEventType, data: any): void {
+    // 태스크 이벤트 발행
+    this.emit(type, data);
 
-    // 이벤트 발행
-    this.emit(eventType, enhancedData);
-
-    // 모든 이벤트에 대한 일반 이벤트도 발행
-    this.emit("taskEvent", { type: eventType, ...enhancedData });
+    // 메타 이벤트 발행
+    this.emit("taskEvent", { type, data });
   }
 
   /**
    * 워커 이벤트 발행
+   * @param type 이벤트 타입
+   * @param data 이벤트 데이터
+   */
+  emitWorkerEvent(type: WorkerEventType, data: any): void {
+    // 워커 이벤트 발행
+    this.emit(type, data);
+
+    // 메타 이벤트 발행
+    this.emit("workerEvent", { type, data });
+  }
+
+  /**
+   * 코어 이벤트 발행
    * @param eventType 이벤트 타입
    * @param data 이벤트 데이터
    */
-  emitWorkerEvent(eventType: WorkerEventType, data: WorkerEventData): void {
-    // 이벤트 메타데이터 추가
-    const enhancedData = {
-      ...data,
-      timestamp: Date.now(),
-      eventType,
-    };
+  emitCoreEvent(eventType: CoreEventType, data: any): void {
+    // 코어 이벤트 발행
+    this.emit(eventType, data);
 
-    // 이벤트 발행
-    this.emit(eventType, enhancedData);
-
-    // 모든 이벤트에 대한 일반 이벤트도 발행
-    this.emit("workerEvent", { type: eventType, ...enhancedData });
+    // 메타 이벤트 발행
+    this.emit("coreEvent", { type: eventType, data });
   }
 
   /**
@@ -284,7 +312,7 @@ export class EventHub extends EventEmitter implements IEventHub {
     newState: string,
     workerType?: string
   ): void {
-    this.emitWorkerEvent(WorkerEventType.STATE_CHANGE, {
+    this.emitWorkerEvent(WorkerEventType.STATUS_CHANGE, {
       workerId,
       previousState,
       newState,

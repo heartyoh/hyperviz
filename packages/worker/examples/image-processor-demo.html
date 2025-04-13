@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>이미지 프로세서 & 캐시 데모</title>
+    <meta name="service-worker-allowed" content="false" />
+    <title>이미지 프로세서 &amp; 캐시 데모</title>
     <style>
       * {
         box-sizing: border-box;
@@ -286,12 +287,20 @@
       <div class="display">
         <div class="image-container">
           <h3>원본 이미지</h3>
-          <img id="originalImage" alt="원본 이미지" />
+          <img
+            id="originalImage"
+            src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y4ZmFmYyIvPjx0ZXh0IHg9IjEwMCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2NjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4="
+            alt="원본 이미지"
+          />
           <div id="originalInfo"></div>
         </div>
         <div class="image-container">
           <h3>처리된 이미지</h3>
-          <img id="processedImage" alt="처리된 이미지" />
+          <img
+            id="processedImage"
+            src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y4ZmFmYyIvPjx0ZXh0IHg9IjEwMCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2NjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4="
+            alt="처리된 이미지"
+          />
           <div id="processedInfo"></div>
         </div>
       </div>
@@ -323,16 +332,17 @@
     </script>
 
     <script type="module">
-      import { ImageProcessor, ImageProcessorEvent } from "../dist/index.js";
+      import { ImageProcessor } from "../dist/index.js";
       import {
         CacheStorageType,
-        ScalingAlgorithm,
         ImageFormat,
+        ImageProcessorEvents,
       } from "../dist/imaging/types.js";
 
       let imageProcessor;
       let originalImageData = null;
       let originalImageURL = null;
+      let isProcessorReady = false;
 
       // DOM 요소
       const imageInput = document.getElementById("imageInput");
@@ -352,10 +362,12 @@
       const closeModalBtn = document.getElementById("closeModalBtn");
 
       // 이미지 프로세서 초기화
-      function initImageProcessor() {
+      async function initImageProcessor() {
         // 기존 인스턴스 정리
         if (imageProcessor) {
-          imageProcessor.dispose();
+          await imageProcessor.destroy();
+          imageProcessor = null;
+          isProcessorReady = false;
         }
 
         const cacheStorageType = document.getElementById("cacheStorage").value;
@@ -389,46 +401,44 @@
           useDiscreteScales:
             document.getElementById("useDiscreteScales").value === "true",
           discreteScales: {
-            ORIGINAL: 1.0, // 원본 크기
-            MEDIUM: 0.5, // 원본의 50%
-            SMALL: 0.25, // 원본의 25%
-            TINY: 0.1, // 원본의 10%
+            ORIGINAL: 1.0,
+            MEDIUM: 0.5,
+            SMALL: 0.25,
+            TINY: 0.1,
           },
-          workerUrl: "../dist/imaging/worker-scripts/image-worker.js", // 원래 경로로 복원
+          workerUrl: "../dist/imaging/worker-scripts/image-worker.js",
           onReady: () => {
+            isProcessorReady = true;
             logInfo("이미지 프로세서 준비 완료");
-            updateStats();
-          },
-          onError: (error) => {
-            logError(`이미지 프로세서 오류: ${error.message}`);
+            loadSampleImage();
           },
         });
 
         // 이벤트 리스너 등록
-        imageProcessor.on(ImageProcessorEvent.CACHE_HIT, (data) => {
+        imageProcessor.on(ImageProcessorEvents.CACHE_HIT, (data) => {
           logCache(`캐시 히트: ${JSON.stringify(data)}`);
         });
 
-        imageProcessor.on(ImageProcessorEvent.CACHE_MISS, (data) => {
+        imageProcessor.on(ImageProcessorEvents.CACHE_MISS, (data) => {
           logCache(`캐시 미스: ${JSON.stringify(data)}`);
         });
 
-        imageProcessor.on(ImageProcessorEvent.TASK_START, (data) => {
+        imageProcessor.on(ImageProcessorEvents.TASK_START, (data) => {
           logInfo(`작업 시작: ${data.taskId}`);
           progressBar.style.width = "0%";
         });
 
-        imageProcessor.on(ImageProcessorEvent.TASK_PROGRESS, (data) => {
+        imageProcessor.on(ImageProcessorEvents.TASK_PROGRESS, (data) => {
           progressBar.style.width = `${data.progress * 100}%`;
         });
 
-        imageProcessor.on(ImageProcessorEvent.TASK_COMPLETE, (data) => {
+        imageProcessor.on(ImageProcessorEvents.TASK_COMPLETE, (data) => {
           logSuccess(`작업 완료: ${data.taskId}`);
           progressBar.style.width = "100%";
           updateStats();
         });
 
-        imageProcessor.on(ImageProcessorEvent.TASK_FAIL, (data) => {
+        imageProcessor.on(ImageProcessorEvents.TASK_FAIL, (data) => {
           logError(`작업 실패: ${data.error}`);
           progressBar.style.width = "0%";
         });
@@ -441,7 +451,23 @@
           return;
         }
 
+        if (!isProcessorReady) {
+          logError(
+            "이미지 프로세서가 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요."
+          );
+          return;
+        }
+
         try {
+          // Blob을 Base64로 변환
+          const reader = new FileReader();
+          const base64Promise = new Promise((resolve, reject) => {
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+          });
+          reader.readAsDataURL(originalImageData);
+          const base64Data = await base64Promise;
+
           // 옵션 설정
           const options = {
             width: parseInt(document.getElementById("width").value, 10),
@@ -454,24 +480,18 @@
             algorithm: document.getElementById("algorithm").value,
             format: document.getElementById("format").value,
             devicePixelRatio: window.devicePixelRatio || 1,
+            sourceUrl: originalImageURL,
           };
 
-          // 소스 URL 정보 준비 - File 객체인 경우 파일명 활용, URL인 경우 그대로 사용
-          let sourceUrl = null;
-          if (originalImageData instanceof File) {
-            sourceUrl = originalImageData.name;
-          } else if (originalImageURL) {
-            sourceUrl = originalImageURL;
-          }
-
           const startTime = performance.now();
-          // 워커를 통한 이미지 처리 - 소스 URL 정보 추가 전달
-          const result = await imageProcessor.scaleImage(
-            originalImageData,
-            options,
-            sourceUrl // 소스 URL 정보 전달
-          );
+
+          // Base64 데이터 전달
+          const result = await imageProcessor.scaleImage(base64Data, options);
+
           const endTime = performance.now();
+
+          // 콘솔에 결과 형식 출력 (디버깅용)
+          console.log("이미지 처리 결과:", result);
 
           // 처리 결과 표시
           displayProcessedImage(result, endTime - startTime);
@@ -482,45 +502,140 @@
 
       // 처리된 이미지 표시
       function displayProcessedImage(result, processingTime) {
-        const processedUrl =
-          typeof result.data === "string"
-            ? result.data
-            : URL.createObjectURL(
-                new Blob([result.data], {
-                  type: result.metadata.originalFormat,
-                })
-              );
+        // 결과 데이터 검증
+        console.log("처리 결과:", result);
 
-        processedImage.src = processedUrl;
-        processedImage.onload = () => {
-          if (typeof result.data !== "string") {
-            URL.revokeObjectURL(processedUrl);
-          }
-        };
+        // 결과 구조 분석
+        let processingResult = result;
 
-        // 처리 정보 표시
-        const fromCache = result.metadata.fromCache
-          ? '<span class="badge">캐시됨</span>'
-          : "";
+        // TaskResponse 형식인 경우 (result 필드 내부에 실제 데이터가 있음)
+        if (result && result.result) {
+          processingResult = result.result;
+        }
 
-        // 이산 스케일 사용 시 배지 추가
-        const discreteScaleBadge =
-          document.getElementById("useDiscreteScales").value === "true"
-            ? '<span class="badge" style="background:#6ee7b7;">이산 스케일</span>'
+        // ProcessingResult 형식 확인 (data 필드 있는지 확인)
+        if (processingResult && processingResult.data) {
+          // 이미지 데이터가 데이터 URL이면 직접 표시
+          processedImage.src = processingResult.data;
+
+          // 처리 정보 표시
+          const fromCache = processingResult.fromCache
+            ? '<span class="badge">캐시됨</span>'
             : "";
 
-        processedInfo.innerHTML = `
-        <p>${fromCache} ${discreteScaleBadge} 크기: ${
-          result.metadata.processedWidth
-        } x ${result.metadata.processedHeight} 픽셀</p>
-        <p>원본: ${result.metadata.originalWidth} x ${
-          result.metadata.originalHeight
-        } 픽셀</p>
-        <p>처리 시간: ${result.metadata.processingTime.toFixed(2)}ms</p>
-        <p>총 시간: ${processingTime.toFixed(2)}ms</p>
-      `;
+          const discreteScaleBadge =
+            document.getElementById("useDiscreteScales").value === "true"
+              ? '<span class="badge" style="background:#6ee7b7;">이산 스케일</span>'
+              : "";
 
-        updateStats();
+          processedInfo.innerHTML = `
+            <p>${fromCache} ${discreteScaleBadge} 크기: ${
+            processingResult.width
+          } x ${processingResult.height} 픽셀</p>
+            <p>원본: ${processingResult.originalWidth || "정보 없음"} x ${
+            processingResult.originalHeight || "정보 없음"
+          } 픽셀</p>
+            <p>처리 시간: ${
+              processingResult.processingTime?.toFixed(2) || "정보 없음"
+            }ms</p>
+            <p>총 시간: ${processingTime.toFixed(2)}ms</p>
+          `;
+
+          updateStats();
+        }
+        // 기존 imageData 형식도 지원 (이전 코드 호환성)
+        else if (
+          result.imageData ||
+          (result.result && result.result.imageData)
+        ) {
+          // imageData가 result 안에 있는 경우 처리
+          const imageData = result.result?.imageData || result.imageData;
+          const metadata = result.result?.metadata || result.metadata;
+
+          createImageBitmap(imageData).then((bitmap) => {
+            const canvas = document.createElement("canvas");
+            canvas.width = metadata.processedWidth;
+            canvas.height = metadata.processedHeight;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return;
+
+            ctx.drawImage(bitmap, 0, 0);
+            processedImage.src = canvas.toDataURL(metadata.originalFormat);
+            bitmap.close();
+
+            // 처리 정보 표시
+            const fromCache = metadata.fromCache
+              ? '<span class="badge">캐시됨</span>'
+              : "";
+
+            const discreteScaleBadge =
+              document.getElementById("useDiscreteScales").value === "true"
+                ? '<span class="badge" style="background:#6ee7b7;">이산 스케일</span>'
+                : "";
+
+            processedInfo.innerHTML = `
+              <p>${fromCache} ${discreteScaleBadge} 크기: ${
+              metadata.processedWidth
+            } x ${metadata.processedHeight} 픽셀</p>
+              <p>원본: ${metadata.originalWidth} x ${
+              metadata.originalHeight
+            } 픽셀</p>
+              <p>처리 시간: ${metadata.processingTime.toFixed(2)}ms</p>
+              <p>총 시간: ${processingTime.toFixed(2)}ms</p>
+            `;
+
+            updateStats();
+          });
+        } else {
+          // 결과 형식이 예상과 다른 경우
+          logError("이미지 처리 결과 형식이 올바르지 않습니다.");
+          console.error("예상치 못한 결과 형식:", result);
+        }
+      }
+
+      // 샘플 이미지 로드
+      async function loadSampleImage() {
+        try {
+          const sampleImageUrl = "https://picsum.photos/800/600";
+          const response = await fetch(sampleImageUrl);
+          if (!response.ok)
+            throw new Error("샘플 이미지를 가져오는데 실패했습니다.");
+
+          const blob = await response.blob();
+          originalImageData = blob; // ArrayBuffer 대신 Blob 직접 사용
+          originalImageURL = sampleImageUrl;
+
+          // 원본 이미지 표시를 위한 URL 생성
+          const originalUrl = URL.createObjectURL(blob);
+          originalImage.src = originalUrl;
+
+          // 이미지 메타 정보 로드
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(originalUrl);
+
+            originalInfo.innerHTML = `
+              <p>크기: ${img.width} x ${img.height} 픽셀</p>
+              <p>타입: ${blob.type}</p>
+              <p>크기: ${(blob.size / 1024).toFixed(2)} KB</p>
+            `;
+
+            // 기본 처리 크기 설정
+            document.getElementById("width").value = img.width;
+            document.getElementById("height").value = img.height;
+
+            processBtn.disabled = false;
+          };
+
+          img.onerror = () => {
+            URL.revokeObjectURL(originalUrl);
+            logError("이미지 로드 실패");
+          };
+
+          img.src = originalUrl;
+        } catch (error) {
+          logError(`샘플 이미지 로드 오류: ${error.message}`);
+        }
       }
 
       // 이미지 입력 처리
@@ -528,8 +643,8 @@
         if (!file) return;
 
         try {
+          // 파일을 직접 Blob으로 사용
           originalImageData = file;
-          // 원본 이미지 URL 저장 (파일 객체인 경우 파일명)
           originalImageURL = file instanceof File ? file.name : null;
 
           // 원본 이미지 표시
@@ -542,10 +657,10 @@
             URL.revokeObjectURL(originalUrl);
 
             originalInfo.innerHTML = `
-            <p>크기: ${img.width} x ${img.height} 픽셀</p>
-            <p>타입: ${file.type}</p>
-            <p>크기: ${(file.size / 1024).toFixed(2)} KB</p>
-          `;
+              <p>크기: ${img.width} x ${img.height} 픽셀</p>
+              <p>타입: ${file.type}</p>
+              <p>크기: ${(file.size / 1024).toFixed(2)} KB</p>
+            `;
 
             // 기본 처리 크기 설정
             document.getElementById("width").value = img.width;
@@ -562,23 +677,6 @@
           img.src = originalUrl;
         } catch (error) {
           logError(`이미지 입력 오류: ${error.message}`);
-        }
-      }
-
-      // 샘플 이미지 로드
-      async function loadSampleImage() {
-        try {
-          const sampleImageUrl = "https://picsum.photos/800/600";
-          originalImageURL = sampleImageUrl; // 원본 URL 저장
-
-          const response = await fetch(sampleImageUrl);
-          if (!response.ok)
-            throw new Error("샘플 이미지를 가져오는데 실패했습니다.");
-
-          const blob = await response.blob();
-          handleImageInput(blob);
-        } catch (error) {
-          logError(`샘플 이미지 로드 오류: ${error.message}`);
         }
       }
 

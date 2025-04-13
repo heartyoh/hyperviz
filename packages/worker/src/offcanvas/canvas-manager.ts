@@ -14,6 +14,7 @@ import {
   WorkerMessage,
   WorkerMessageType,
 } from "./types.js";
+import { TimeoutManager } from "../core/timeout-manager.js";
 
 /**
  * OffscreenCanvas 매니저 클래스
@@ -37,7 +38,7 @@ export class OffscreenCanvasManager extends EventEmitter {
     string,
     {
       resolve: (value: any) => void;
-      reject: (error: Error) => void;
+      reject: (reason?: any) => void;
     }
   >();
   /** 애니메이션 프레임 ID */
@@ -56,6 +57,7 @@ export class OffscreenCanvasManager extends EventEmitter {
   private useFallbackMode = false;
   /** 2D 컨텍스트 (폴백 모드용) */
   private fallbackContext: CanvasRenderingContext2D | null = null;
+  private timeoutManager: TimeoutManager;
 
   /**
    * OffscreenCanvasManager 생성자
@@ -72,7 +74,18 @@ export class OffscreenCanvasManager extends EventEmitter {
       ...options,
     };
 
-    this.initialize();
+    // TimeoutManager 초기화
+    this.timeoutManager = new TimeoutManager({
+      maxRetries: 2,
+      retryDelayBase: 1000,
+      maxJitter: 200,
+      maxBackoffDelay: 5000,
+      debug: this.options.debug,
+    });
+
+    this.initialize().catch((error) => {
+      this.error("초기화 오류:", error);
+    });
   }
 
   /**
@@ -363,21 +376,11 @@ export class OffscreenCanvasManager extends EventEmitter {
    * @private
    */
   private async setupWorker(): Promise<void> {
-    if (!this.canvas) {
-      throw new Error("캔버스가 초기화되지 않았습니다.");
-    }
-
-    // OffscreenCanvas API 지원 확인
-    if (!("transferControlToOffscreen" in this.canvas)) {
-      throw new Error("OffscreenCanvas API가 지원되지 않는 브라우저입니다.");
-    }
-
-    // 워커 스크립트 URL 결정
-    const workerUrl = this.options.workerUrl || this.getDefaultWorkerUrl();
-
-    // 워커 생성
     try {
-      this.worker = new Worker(workerUrl);
+      const workerUrl = this.options.workerUrl || this.getDefaultWorkerUrl();
+      this.log(`워커 초기화 중: ${workerUrl}`);
+
+      this.worker = new Worker(workerUrl, { type: "module" });
 
       // 메시지 핸들러 설정
       this.worker.onmessage = this.handleWorkerMessage.bind(this);
@@ -385,15 +388,20 @@ export class OffscreenCanvasManager extends EventEmitter {
 
       // 워커 준비 대기
       await new Promise<void>((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-          reject(new Error("워커 초기화 타임아웃"));
-        }, 5000);
+        // TimeoutManager를 사용하여 타임아웃 설정
+        const timeoutId = this.timeoutManager.set(
+          "worker-init",
+          () => {
+            reject(new Error("워커 초기화 타임아웃"));
+          },
+          5000
+        );
 
         const readyHandler = (event: MessageEvent) => {
           const message = event.data as WorkerMessage;
           if (message.type === WorkerMessageType.READY) {
             this.worker?.removeEventListener("message", readyHandler);
-            clearTimeout(timeoutId);
+            this.timeoutManager.clear("worker-init");
             this.workerReady = true;
             resolve();
           }
@@ -437,6 +445,15 @@ export class OffscreenCanvasManager extends EventEmitter {
 
       // 워커에 캔버스 전송 (drawer-worker.ts 방식과 동일하게)
       return new Promise<void>((resolve, reject) => {
+        // TimeoutManager를 사용하여 초기화 타임아웃 설정
+        const timeoutId = this.timeoutManager.set(
+          "canvas-init",
+          () => {
+            reject(new Error("캔버스 초기화 타임아웃"));
+          },
+          5000
+        );
+
         // 초기화 완료 이벤트 핸들러
         const initHandler = (event: MessageEvent) => {
           const message = event.data;
@@ -445,12 +462,14 @@ export class OffscreenCanvasManager extends EventEmitter {
             if (this.worker) {
               this.worker.removeEventListener("message", initHandler);
             }
+            this.timeoutManager.clear("canvas-init");
             this.log("캔버스가 워커로 전송되고 초기화되었습니다.");
             resolve();
           } else if (message.type === "error") {
             if (this.worker) {
               this.worker.removeEventListener("message", initHandler);
             }
+            this.timeoutManager.clear("canvas-init");
             reject(new Error(message.data?.message || "캔버스 초기화 실패"));
           }
         };
@@ -512,6 +531,17 @@ export class OffscreenCanvasManager extends EventEmitter {
     const commandId = command.id || this.generateCommandId();
     command.id = commandId;
 
+    // Transferable 객체 자동 감지 및 추가
+    const autoDetectedTransferables = this.detectTransferables(command);
+    if (autoDetectedTransferables.length > 0) {
+      // 중복 제거 (이미 명시적으로 전달된 객체는 다시 추가하지 않음)
+      for (const transferable of autoDetectedTransferables) {
+        if (!transferables.includes(transferable)) {
+          transferables.push(transferable);
+        }
+      }
+    }
+
     return new Promise<T>((resolve, reject) => {
       const messageId = `msg-${Date.now()}-${Math.random()
         .toString(36)
@@ -527,8 +557,118 @@ export class OffscreenCanvasManager extends EventEmitter {
         data: command,
       };
 
+      // 디버그 모드에서는 전송되는 Transferables 로깅
+      if (this.options.debug && transferables.length > 0) {
+        this.log(
+          `Transferable 객체 ${
+            transferables.length
+          }개 전송: ${this.getTransferableTypeSummary(transferables)}`
+        );
+      }
+
       this.worker!.postMessage(message, transferables);
     });
+  }
+
+  /**
+   * 명령에서 Transferable 객체 자동 감지
+   * @private
+   * @param command 캔버스 명령
+   * @returns 감지된 Transferable 객체 배열
+   */
+  private detectTransferables(command: CanvasCommand): Transferable[] {
+    const transferables: Transferable[] = [];
+
+    // 명령 타입에 따라 다른 처리
+    if (command.type === CanvasCommandType.RENDER && command.params) {
+      this.findTransferablesInObject(command.params, transferables);
+    }
+
+    return transferables;
+  }
+
+  /**
+   * 객체 내에서 Transferable 객체 찾기 (재귀적)
+   * @private
+   * @param obj 검사할 객체
+   * @param transferables 찾은 Transferable 객체를 추가할 배열
+   */
+  private findTransferablesInObject(
+    obj: any,
+    transferables: Transferable[]
+  ): void {
+    if (!obj || typeof obj !== "object") return;
+
+    // ArrayBuffer 및 TypedArray 감지
+    if (obj instanceof ArrayBuffer) {
+      transferables.push(obj);
+    } else if (ArrayBuffer.isView(obj) && !(obj instanceof DataView)) {
+      // TypedArray(Float32Array, Uint8Array 등)인 경우 기본 버퍼 전송
+      if (obj.buffer instanceof ArrayBuffer) {
+        transferables.push(obj.buffer);
+      }
+    }
+    // ImageBitmap 감지
+    else if (typeof ImageBitmap !== "undefined" && obj instanceof ImageBitmap) {
+      transferables.push(obj);
+    }
+    // OffscreenCanvas 감지
+    else if (
+      typeof OffscreenCanvas !== "undefined" &&
+      obj instanceof OffscreenCanvas
+    ) {
+      transferables.push(obj);
+    }
+    // 배열 처리
+    else if (Array.isArray(obj)) {
+      for (const item of obj) {
+        this.findTransferablesInObject(item, transferables);
+      }
+    }
+    // 객체 처리 (배열이 아닌 객체)
+    else {
+      for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          this.findTransferablesInObject(obj[key], transferables);
+        }
+      }
+    }
+  }
+
+  /**
+   * Transferable 객체 타입 요약 생성
+   * @private
+   * @param transferables Transferable 객체 배열
+   * @returns 타입 요약 문자열
+   */
+  private getTransferableTypeSummary(transferables: Transferable[]): string {
+    const typeCounts: Record<string, number> = {};
+
+    for (const item of transferables) {
+      let type = "unknown";
+
+      if (item instanceof ArrayBuffer) {
+        type = "ArrayBuffer";
+      } else if (
+        typeof ImageBitmap !== "undefined" &&
+        item instanceof ImageBitmap
+      ) {
+        type = "ImageBitmap";
+      } else if (
+        typeof OffscreenCanvas !== "undefined" &&
+        item instanceof OffscreenCanvas
+      ) {
+        type = "OffscreenCanvas";
+      } else if (ArrayBuffer.isView(item) && !(item instanceof DataView)) {
+        type = item.constructor.name;
+      }
+
+      typeCounts[type] = (typeCounts[type] || 0) + 1;
+    }
+
+    return Object.entries(typeCounts)
+      .map(([type, count]) => `${type}(${count})`)
+      .join(", ");
   }
 
   /**
@@ -814,11 +954,20 @@ export class OffscreenCanvasManager extends EventEmitter {
   }
 
   /**
-   * 리소스 정리
+   * 객체 정리
    */
   public dispose(): void {
     // 애니메이션 중지
     this.stopAnimation();
+
+    // 정리
+    this.timeoutManager.clearAll();
+
+    // 워커 정리
+    if (this.worker) {
+      this.worker.terminate();
+      this.worker = null;
+    }
 
     // 리사이즈 옵저버 정리
     if (this.resizeObserver) {
@@ -826,30 +975,19 @@ export class OffscreenCanvasManager extends EventEmitter {
       this.resizeObserver = null;
     }
 
-    // 워커 정리
-    if (this.worker) {
-      this.sendCommand({
-        type: CanvasCommandType.DISPOSE,
-      })
-        .catch((err) => {
-          this.error("워커 정리 실패:", err);
-        })
-        .finally(() => {
-          this.worker?.terminate();
-          this.worker = null;
-        });
+    // 보류 중인 명령 정리
+    for (const pendingCmd of this.pendingCommands.values()) {
+      pendingCmd.reject(new Error("OffscreenCanvasManager가 정리되었습니다."));
     }
-
-    // 대기 명령 정리
-    this.pendingCommands.forEach(({ reject }) => {
-      reject(new Error("매니저가 정리되었습니다."));
-    });
     this.pendingCommands.clear();
 
-    // 이벤트 리스너 정리
-    this.removeAllListeners();
+    // 상태 초기화
+    this.canvas = null;
+    this.canvasTransferred = false;
+    this.workerReady = false;
+    this.fallbackContext = null;
 
-    this.log("캔버스 매니저 정리 완료");
+    this.log("OffscreenCanvasManager 정리 완료");
   }
 
   /**

@@ -57,12 +57,22 @@ export enum Canvas2DCommandType {
 export enum CanvasWebGLCommandType {
   /** 셰이더 설정 */
   SET_SHADER = "setShader",
+  /** 셰이더 프로그램 컴파일 */
+  COMPILE_SHADER = "compileShader",
   /** 버퍼 설정 */
   SET_BUFFER = "setBuffer",
+  /** 버텍스 배열 객체 설정 */
+  SET_VAO = "setVAO",
   /** 유니폼 설정 */
   SET_UNIFORM = "setUniform",
+  /** 텍스처 설정 */
+  SET_TEXTURE = "setTexture",
   /** 도형 그리기 */
   DRAW = "draw",
+  /** 인스턴스 그리기 */
+  DRAW_INSTANCED = "drawInstanced",
+  /** Transform Feedback 설정 */
+  SET_TRANSFORM_FEEDBACK = "setTransformFeedback",
 }
 
 /**
@@ -279,4 +289,95 @@ export enum CanvasEventType {
   RENDER_COMPLETE = "renderComplete",
   /** 오류 */
   ERROR = "error",
+}
+
+/**
+ * WebGL 셰이더 타입
+ */
+export enum ShaderType {
+  /** 버텍스 셰이더 */
+  VERTEX = "vertex",
+  /** 프래그먼트 셰이더 */
+  FRAGMENT = "fragment",
+}
+
+/**
+ * 셰이더 컴파일 명령 파라미터
+ */
+export interface ShaderCompileParams {
+  /** 프로그램 ID */
+  programId: string;
+  /** 버텍스 셰이더 소스 */
+  vertexSource: string;
+  /** 프래그먼트 셰이더 소스 */
+  fragmentSource: string;
+  /** 속성 위치 바인딩 */
+  attributeLocations?: Record<string, number>;
+}
+
+/**
+ * WebGL 버퍼 타입
+ */
+export enum WebGLBufferType {
+  /** 버텍스 버퍼 */
+  VERTEX = "vertex",
+  /** 인덱스 버퍼 */
+  INDEX = "index",
+  /** 유니폼 버퍼 */
+  UNIFORM = "uniform",
+}
+
+/**
+ * WebGL 버퍼 사용법
+ */
+export enum WebGLBufferUsage {
+  /** 정적 데이터 */
+  STATIC = "static",
+  /** 동적 데이터 */
+  DYNAMIC = "dynamic",
+  /** 스트림 데이터 */
+  STREAM = "stream",
+}
+
+/**
+ * 버퍼 설정 명령 파라미터
+ */
+export interface BufferParams {
+  /** 버퍼 ID */
+  bufferId: string;
+  /** 버퍼 타입 */
+  type: WebGLBufferType;
+  /** 데이터 */
+  data: Float32Array | Uint16Array | Uint32Array;
+  /** 사용법 */
+  usage: WebGLBufferUsage;
+}
+
+/**
+ * VAO 설정 명령 파라미터
+ */
+export interface VAOParams {
+  /** VAO ID */
+  vaoId: string;
+  /** 프로그램 ID */
+  programId: string;
+  /** 속성 설정 */
+  attributes: Array<{
+    /** 버퍼 ID */
+    bufferId: string;
+    /** 속성 이름 */
+    name: string;
+    /** 속성 크기 (요소 수) */
+    size: number;
+    /** 속성 타입 */
+    type: "FLOAT" | "INT";
+    /** 정규화 여부 */
+    normalized?: boolean;
+    /** 스트라이드 */
+    stride?: number;
+    /** 오프셋 */
+    offset?: number;
+  }>;
+  /** 인덱스 버퍼 ID (선택적) */
+  indexBufferId?: string;
 }

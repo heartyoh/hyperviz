@@ -1,60 +1,60 @@
 /**
- * 이미지 캐시 모듈
- * 이미지 처리 결과를 메모리에 캐싱하여 재계산 방지
+ * Image Cache Module
+ * Caches image processing results in memory to prevent recalculation
  */
 import {
   CacheStorageType,
   ImageProcessingOptions,
-  ImageProcessingResult,
+  ProcessingResult,
 } from "./types.js";
 
 /**
- * 캐시 항목 인터페이스
+ * Cache Item Interface
  */
 interface CacheItem {
-  /** 처리 결과 */
-  result: ImageProcessingResult;
-  /** 캐시 생성 시간 */
+  /** Processing result */
+  result: ProcessingResult;
+  /** Cache creation timestamp */
   timestamp: number;
-  /** 마지막 접근 시간 */
+  /** Last accessed timestamp */
   lastAccessed: number;
 }
 
 /**
- * 이미지 캐시 설정
+ * Image Cache Options
  */
 export interface ImageCacheOptions {
-  /** 최대 캐시 크기 (항목 수) */
+  /** Maximum cache size (number of items) */
   maxSize?: number;
-  /** 캐시 항목 만료 시간 (ms) */
+  /** Cache item expiry time (ms) */
   expiryTime?: number;
-  /** 자동 정리 간격 (ms) */
+  /** Auto cleanup interval (ms) */
   cleanupInterval?: number;
-  /** 디버그 로깅 활성화 */
+  /** Enable debug logging */
   debug?: boolean;
-  /** 캐시 스토리지 유형 (기본값: MEMORY) */
+  /** Cache storage type (default: MEMORY) */
   storageType?: CacheStorageType;
-  /** IndexedDB 데이터베이스 이름 */
+  /** IndexedDB database name */
   dbName?: string;
-  /** IndexedDB 버전 */
+  /** IndexedDB version */
   dbVersion?: number;
 }
 
-// IndexedDB 관련 상수
+// IndexedDB constants
 const DB_NAME = "hyperviz-image-cache";
 const DB_VERSION = 1;
 const STORE_NAME = "image-processing-results";
 
 /**
- * 이미지 캐시 클래스
+ * Image Cache Class
  *
- * 이미지 처리 결과를 메모리에 캐싱하여 동일한 이미지와 옵션에 대한
- * 중복 처리를 방지하고 성능을 향상시킵니다.
+ * Caches image processing results in memory to prevent duplicate processing
+ * of the same images with the same options, improving performance.
  */
 export class ImageCache {
-  /** 캐시 항목 저장소 */
+  /** Cache storage */
   private cache = new Map<string, CacheItem>();
-  /** 캐시 통계 */
+  /** Cache statistics */
   private stats = {
     hits: 0,
     misses: 0,
@@ -62,46 +62,46 @@ export class ImageCache {
     dbHits: 0,
     dbMisses: 0,
   };
-  /** 최대 캐시 크기 */
+  /** Maximum cache size */
   private maxSize: number;
-  /** 캐시 항목 만료 시간 (ms) */
+  /** Cache item expiry time (ms) */
   private expiryTime: number;
-  /** 정리 타이머 ID */
+  /** Cleanup timer ID */
   private cleanupTimer: NodeJS.Timeout | null = null;
-  /** 디버그 모드 */
+  /** Debug mode */
   private debug: boolean;
-  /** 캐시 스토리지 유형 */
+  /** Cache storage type */
   private storageType: CacheStorageType;
-  /** IndexedDB 데이터베이스 이름 */
+  /** IndexedDB database name */
   private dbName: string;
-  /** IndexedDB 버전 */
+  /** IndexedDB version */
   private dbVersion: number;
-  /** IndexedDB 데이터베이스 인스턴스 */
+  /** IndexedDB database instance */
   private db: IDBDatabase | null = null;
-  /** IndexedDB 초기화 완료 여부 */
+  /** IndexedDB initialization status */
   private dbInitialized = false;
-  /** IndexedDB 초기화 중 여부 */
+  /** IndexedDB initialization in progress */
   private dbInitializing = false;
-  /** IndexedDB 초기화 대기 프로미스 */
+  /** IndexedDB initialization promise */
   private dbInitPromise: Promise<void> | null = null;
 
   /**
-   * 이미지 캐시 생성자
-   * @param options 캐시 설정
+   * Image cache constructor
+   * @param options Cache options
    */
   constructor(options: ImageCacheOptions = {}) {
     this.maxSize = options.maxSize || 100;
-    this.expiryTime = options.expiryTime || 10 * 60 * 1000; // 기본 10분
+    this.expiryTime = options.expiryTime || 15 * 60 * 1000; // 15 minutes
     this.debug = options.debug || false;
     this.storageType = options.storageType || CacheStorageType.MEMORY;
     this.dbName = options.dbName || DB_NAME;
     this.dbVersion = options.dbVersion || DB_VERSION;
 
-    // 정기적인 캐시 정리 설정
-    const cleanupInterval = options.cleanupInterval || 5 * 60 * 1000; // 기본 5분
+    // Set up periodic cache cleanup
+    const cleanupInterval = options.cleanupInterval || 5 * 60 * 1000; // Default 5 minutes
     this.cleanupTimer = setInterval(() => this.cleanup(), cleanupInterval);
 
-    // IndexedDB 사용 시 초기화
+    // Initialize IndexedDB if needed
     if (
       this.storageType === CacheStorageType.INDEXED_DB ||
       this.storageType === CacheStorageType.HYBRID
@@ -111,25 +111,25 @@ export class ImageCache {
   }
 
   /**
-   * IndexedDB 초기화
-   * @returns 초기화 완료 프로미스
+   * Initialize IndexedDB
+   * @returns Initialization completion promise
    */
   private async initIndexedDB(): Promise<void> {
-    // 브라우저 환경 체크
+    // Check for browser environment
     if (typeof indexedDB === "undefined") {
       this.logDebug(
-        "IndexedDB를 사용할 수 없는 환경입니다. 메모리 캐시만 사용합니다."
+        "IndexedDB is not available in this environment. Using memory cache only."
       );
       this.storageType = CacheStorageType.MEMORY;
       return;
     }
 
-    // 이미 초기화 중인 경우
+    // Already initializing
     if (this.dbInitializing) {
       return this.dbInitPromise as Promise<void>;
     }
 
-    // 이미 초기화된 경우
+    // Already initialized
     if (this.dbInitialized) {
       return Promise.resolve();
     }
@@ -142,13 +142,13 @@ export class ImageCache {
         request.onupgradeneeded = (event) => {
           const db = request.result;
 
-          // 이미지 처리 결과 저장소 생성
+          // Create object store for image processing results
           if (!db.objectStoreNames.contains(STORE_NAME)) {
             const store = db.createObjectStore(STORE_NAME, {
               keyPath: "cacheKey",
             });
             store.createIndex("timestamp", "timestamp", { unique: false });
-            this.logDebug(`IndexedDB 스토어 생성: ${STORE_NAME}`);
+            this.logDebug(`Created IndexedDB store: ${STORE_NAME}`);
           }
         };
 
@@ -156,18 +156,20 @@ export class ImageCache {
           this.db = request.result;
           this.dbInitialized = true;
           this.dbInitializing = false;
-          this.logDebug("IndexedDB 초기화 완료");
+          this.logDebug("IndexedDB initialization complete");
           resolve();
         };
 
         request.onerror = () => {
-          this.logDebug(`IndexedDB 초기화 실패: ${request.error?.message}`);
+          this.logDebug(
+            `IndexedDB initialization failed: ${request.error?.message}`
+          );
           this.storageType = CacheStorageType.MEMORY;
           this.dbInitializing = false;
           reject(request.error);
         };
       } catch (err) {
-        this.logDebug(`IndexedDB 초기화 예외: ${err}`);
+        this.logDebug(`IndexedDB initialization exception: ${err}`);
         this.storageType = CacheStorageType.MEMORY;
         this.dbInitializing = false;
         reject(err);
@@ -178,63 +180,48 @@ export class ImageCache {
   }
 
   /**
-   * IndexedDB 캐시에서 이미지 처리 결과 조회
-   * @param key 캐시 키
-   * @returns 캐시된 결과 또는 null을 포함한 프로미스
+   * IndexedDB cache lookup
+   * @param key Cache key
+   * @returns Cached result or null in a promise
    */
   private async getFromIndexedDB(key: string): Promise<CacheItem | null> {
-    // IndexedDB가 초기화되지 않은 경우
-    if (!this.dbInitialized || !this.db) {
-      try {
-        await this.initIndexedDB();
-      } catch (err) {
-        return null;
-      }
+    if (!this.db) {
+      return null;
     }
 
-    return new Promise<CacheItem | null>((resolve) => {
-      try {
-        if (!this.db) {
-          resolve(null);
-          return;
-        }
+    try {
+      const tx = this.db.transaction([STORE_NAME], "readonly");
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.get(key);
 
-        const tx = this.db.transaction(STORE_NAME, "readonly");
-        const store = tx.objectStore(STORE_NAME);
-        const request = store.get(key);
-
+      return new Promise((resolve, reject) => {
         request.onsuccess = () => {
-          if (request.result) {
-            this.stats.dbHits++;
-            this.logDebug(`IndexedDB 캐시 히트: ${key}`);
-            resolve(request.result);
+          const item = request.result;
+          if (item) {
+            // Return cached item as is
+            resolve(item);
           } else {
-            this.stats.dbMisses++;
-            this.logDebug(`IndexedDB 캐시 미스: ${key}`);
             resolve(null);
           }
         };
 
         request.onerror = () => {
-          this.logDebug(`IndexedDB 조회 오류: ${request.error?.message}`);
-          this.stats.dbMisses++;
-          resolve(null);
+          reject(request.error);
         };
-      } catch (err) {
-        this.logDebug(`IndexedDB 조회 예외: ${err}`);
-        this.stats.dbMisses++;
-        resolve(null);
-      }
-    });
+      });
+    } catch (error) {
+      this.logDebug(`IndexedDB lookup failed: ${error}`);
+      return null;
+    }
   }
 
   /**
-   * IndexedDB 캐시에 이미지 처리 결과 저장
-   * @param key 캐시 키
-   * @param item 캐시 항목
+   * Save image processing result to IndexedDB cache
+   * @param key Cache key
+   * @param item Cache item
    */
   private async saveToIndexedDB(key: string, item: CacheItem): Promise<void> {
-    // IndexedDB가 초기화되지 않은 경우
+    // If IndexedDB is not initialized
     if (!this.dbInitialized || !this.db) {
       try {
         await this.initIndexedDB();
@@ -253,7 +240,7 @@ export class ImageCache {
         const tx = this.db.transaction(STORE_NAME, "readwrite");
         const store = tx.objectStore(STORE_NAME);
 
-        // 캐시 키와 항목 데이터 결합
+        // Combine cache key and item data
         const entry = {
           cacheKey: key,
           ...item,
@@ -262,26 +249,26 @@ export class ImageCache {
         const request = store.put(entry);
 
         request.onsuccess = () => {
-          this.logDebug(`IndexedDB 캐시 저장: ${key}`);
+          this.logDebug(`Saved to IndexedDB cache: ${key}`);
           resolve();
         };
 
         request.onerror = () => {
-          this.logDebug(`IndexedDB 저장 오류: ${request.error?.message}`);
+          this.logDebug(`IndexedDB save error: ${request.error?.message}`);
           resolve();
         };
       } catch (err) {
-        this.logDebug(`IndexedDB 저장 예외: ${err}`);
+        this.logDebug(`IndexedDB save exception: ${err}`);
         resolve();
       }
     });
   }
 
   /**
-   * IndexedDB에서 만료된 캐시 항목 정리
+   * Clean up expired cache items in IndexedDB
    */
   private async cleanupIndexedDB(): Promise<void> {
-    // IndexedDB가 초기화되지 않은 경우
+    // If IndexedDB is not initialized
     if (!this.dbInitialized || !this.db) {
       return;
     }
@@ -313,7 +300,9 @@ export class ImageCache {
             deletedCount++;
             cursor.continue();
           } else if (deletedCount > 0) {
-            this.logDebug(`IndexedDB 캐시 정리: ${deletedCount}개 항목 제거됨`);
+            this.logDebug(
+              `IndexedDB cache cleanup: ${deletedCount} items removed`
+            );
           }
         };
 
@@ -322,57 +311,55 @@ export class ImageCache {
         };
 
         tx.onerror = () => {
-          this.logDebug(`IndexedDB 정리 오류: ${tx.error?.message}`);
+          this.logDebug(`IndexedDB cleanup error: ${tx.error?.message}`);
           resolve();
         };
       } catch (err) {
-        this.logDebug(`IndexedDB 정리 예외: ${err}`);
+        this.logDebug(`IndexedDB cleanup exception: ${err}`);
         resolve();
       }
     });
   }
 
   /**
-   * 캐시 키 생성
-   * @param imageId 이미지 식별자
-   * @param options 처리 옵션
-   * @returns 캐시 키
+   * Generate cache key
+   * @param imageId Image identifier
+   * @param options Processing options
+   * @returns Cache key
    */
   private generateKey(
     imageId: string,
     options: ImageProcessingOptions
   ): string {
     try {
-      // 캐싱에 필요한 핵심 옵션 추출
+      // Extract essential caching options
       const width = options.width || 0;
       const height = options.height || 0;
       const quality = parseFloat((options.quality || 0.8).toFixed(2));
-      const algorithm = options.algorithm || "bilinear";
       const format = options.format || "image/jpeg";
       const maintainRatio = options.maintainAspectRatio !== false;
 
-      // worker-pool.ts 방식과 유사하게 구현
-      // imageId#algorithm#quality#widthxheight#format
-      return `${imageId}#${algorithm}#${quality}#${width}x${height}#${format}${
+      // Generate cache key
+      return `${imageId}#${quality}#${width}x${height}#${format}${
         maintainRatio ? "" : "#noRatio"
       }`;
     } catch (error) {
-      console.warn("캐시 키 생성 중 오류:", error);
-      // 오류 발생 시 기본 키 생성
+      console.warn("Error generating cache key:", error);
+      // If error occurs, generate a default key
       return `${imageId}-fallback`;
     }
   }
 
   /**
-   * 이미지 처리 결과 캐싱
-   * @param imageId 이미지 식별자
-   * @param options 처리 옵션
-   * @param result 처리 결과
+   * Cache image processing result
+   * @param imageId Image identifier
+   * @param options Processing options
+   * @param result Processing result
    */
   async set(
     imageId: string,
     options: ImageProcessingOptions,
-    result: ImageProcessingResult
+    result: ProcessingResult
   ): Promise<void> {
     const key = this.generateKey(imageId, options);
     const now = Date.now();
@@ -382,22 +369,22 @@ export class ImageCache {
       lastAccessed: now,
     };
 
-    // 메모리 캐시에 저장 (MEMORY 또는 HYBRID 모드)
+    // Save to memory cache (MEMORY or HYBRID mode)
     if (
       this.storageType === CacheStorageType.MEMORY ||
       this.storageType === CacheStorageType.HYBRID
     ) {
-      // 캐시에 저장
+      // Save to cache
       this.cache.set(key, item);
-      this.logDebug(`메모리 캐시 저장: ${key}`);
+      this.logDebug(`Saved to memory cache: ${key}`);
 
-      // 캐시 크기 확인 및 정리
+      // Check cache size and clean up
       if (this.cache.size > this.maxSize) {
         this.evictLRU();
       }
     }
 
-    // IndexedDB 캐시에 저장 (INDEXED_DB 또는 HYBRID 모드)
+    // Save to IndexedDB cache (INDEXED_DB or HYBRID mode)
     if (
       this.storageType === CacheStorageType.INDEXED_DB ||
       this.storageType === CacheStorageType.HYBRID
@@ -407,118 +394,111 @@ export class ImageCache {
   }
 
   /**
-   * 캐시에서 이미지 처리 결과 조회
-   * @param imageId 이미지 식별자
-   * @param options 처리 옵션
-   * @returns 캐시된 결과 또는 null
+   * Lookup image processing result from cache
+   * @param imageId Image identifier
+   * @param options Processing options
+   * @returns Cached result or null
    */
   async get(
     imageId: string,
     options: ImageProcessingOptions
-  ): Promise<ImageProcessingResult | null> {
+  ): Promise<ProcessingResult | null> {
     const key = this.generateKey(imageId, options);
     const now = Date.now();
 
-    // 1. 메모리 캐시 확인 (MEMORY 또는 HYBRID 모드)
+    // 1. Check memory cache (MEMORY or HYBRID mode)
     if (
       this.storageType === CacheStorageType.MEMORY ||
       this.storageType === CacheStorageType.HYBRID
     ) {
       const item = this.cache.get(key);
 
-      // 메모리 캐시 히트
+      // Memory cache hit
       if (item) {
-        // 만료 체크
+        // Expiry check
         if (now - item.timestamp > this.expiryTime) {
           this.cache.delete(key);
           this.stats.misses++;
-          this.logDebug(`메모리 캐시 만료: ${key}`);
+          this.logDebug(`Memory cache expired: ${key}`);
         } else {
-          // 캐시 히트: 마지막 접근 시간 업데이트
+          // Memory cache hit: Update last accessed time
           item.lastAccessed = now;
           this.stats.hits++;
-          this.logDebug(`메모리 캐시 히트: ${key}`);
+          this.logDebug(`Memory cache hit: ${key}`);
 
-          // 결과 복제하여 반환 (원본 보존)
+          // Return cloned result (original preserved)
           const result = this.cloneResult(item.result);
-          // 캐시에서 로드되었음을 표시
-          result.metadata.fromCache = true;
+          // Mark as loaded from cache
+          result.fromCache = true;
           return result;
         }
       } else {
         this.stats.misses++;
-        this.logDebug(`메모리 캐시 미스: ${key}`);
+        this.logDebug(`Memory cache miss: ${key}`);
       }
     }
 
-    // 2. IndexedDB 캐시 확인 (INDEXED_DB 또는 HYBRID 모드)
+    // 2. Check IndexedDB cache (INDEXED_DB or HYBRID mode)
     if (
       this.storageType === CacheStorageType.INDEXED_DB ||
       this.storageType === CacheStorageType.HYBRID
     ) {
       const item = await this.getFromIndexedDB(key);
 
-      // IndexedDB 캐시 히트
+      // IndexedDB cache hit
       if (item) {
-        // 만료 체크
+        // Expiry check
         if (now - item.timestamp > this.expiryTime) {
-          this.logDebug(`IndexedDB 캐시 만료: ${key}`);
+          this.logDebug(`IndexedDB cache expired: ${key}`);
         } else {
-          // 하이브리드 모드인 경우 메모리 캐시에도 저장
+          // If hybrid mode, also save to memory cache
           if (this.storageType === CacheStorageType.HYBRID) {
             item.lastAccessed = now;
             this.cache.set(key, item);
 
-            // 캐시 크기 확인 및 정리
+            // Check cache size and clean up
             if (this.cache.size > this.maxSize) {
               this.evictLRU();
             }
           }
 
-          // 결과 복제하여 반환
+          // Return cloned result
           const result = this.cloneResult(item.result);
-          // 캐시에서 로드되었음을 표시
-          result.metadata.fromCache = true;
+          // Mark as loaded from cache
+          result.fromCache = true;
           return result;
         }
       }
     }
 
-    // 캐시 미스
+    // Cache miss
     return null;
   }
 
   /**
-   * 처리 결과 복제
-   * @param result 원본 결과
-   * @returns 복제된 결과
+   * Clone result data
+   * @param result Original result
+   * @returns Cloned result
    */
-  private cloneResult(result: ImageProcessingResult): ImageProcessingResult {
-    // 메타데이터 복사
-    const clonedMetadata = { ...result.metadata };
-
-    // 데이터 유형에 따른 복제
-    let clonedData: Blob | ArrayBuffer | string;
-
-    if (result.data instanceof Blob) {
-      clonedData = result.data.slice(0, result.data.size, result.data.type);
-    } else if (result.data instanceof ArrayBuffer) {
-      clonedData = result.data.slice(0);
-    } else {
-      clonedData = result.data; // 문자열은 그대로 복사
-    }
-
+  private cloneResult(result: ProcessingResult): ProcessingResult {
+    // Clone result data
     return {
-      data: clonedData,
-      metadata: clonedMetadata,
+      data: result.data,
+      width: result.width,
+      height: result.height,
+      format: result.format,
+      originalWidth: result.originalWidth,
+      originalHeight: result.originalHeight,
+      processingTime: result.processingTime,
+      fromCache: true,
     };
   }
 
   /**
-   * LRU(Least Recently Used) 항목 제거
+   * Evict LRU (Least Recently Used) item
    */
   private evictLRU(): void {
-    // 가장 오래 전에 접근된 항목 찾기
+    // Find the oldest accessed item
     let oldest: [string, CacheItem] | null = null;
 
     for (const entry of this.cache.entries()) {
@@ -527,27 +507,27 @@ export class ImageCache {
       }
     }
 
-    // 제거
+    // Evict
     if (oldest) {
       this.cache.delete(oldest[0]);
       this.stats.evictions++;
-      this.logDebug(`캐시 제거(LRU): ${oldest[0]}`);
+      this.logDebug(`Evicted from cache (LRU): ${oldest[0]}`);
     }
   }
 
   /**
-   * 만료된 캐시 항목 정리
+   * Clean up expired cache items
    */
   private async cleanup(): Promise<void> {
     const now = Date.now();
     let expiredCount = 0;
 
-    // 메모리 캐시 정리
+    // Clean up memory cache
     if (
       this.storageType === CacheStorageType.MEMORY ||
       this.storageType === CacheStorageType.HYBRID
     ) {
-      // 만료된 항목 제거
+      // Remove expired items
       for (const [key, item] of this.cache.entries()) {
         if (now - item.timestamp > this.expiryTime) {
           this.cache.delete(key);
@@ -556,11 +536,11 @@ export class ImageCache {
       }
 
       if (expiredCount > 0) {
-        this.logDebug(`메모리 캐시 정리: ${expiredCount}개 항목 제거됨`);
+        this.logDebug(`Cleaned up memory cache: ${expiredCount} items removed`);
       }
     }
 
-    // IndexedDB 캐시 정리
+    // Clean up IndexedDB cache
     if (
       this.storageType === CacheStorageType.INDEXED_DB ||
       this.storageType === CacheStorageType.HYBRID
@@ -570,8 +550,8 @@ export class ImageCache {
   }
 
   /**
-   * 캐시 통계 정보 반환
-   * @returns 캐시 통계
+   * Return cache statistics
+   * @returns Cache statistics
    */
   getStats(): {
     size: number;
@@ -596,8 +576,8 @@ export class ImageCache {
   }
 
   /**
-   * 디버그 로그 출력
-   * @param message 로그 메시지
+   * Output debug log
+   * @param message Log message
    */
   private logDebug(message: string): void {
     if (this.debug) {
@@ -606,13 +586,13 @@ export class ImageCache {
   }
 
   /**
-   * 캐시 초기화
+   * Initialize cache
    */
   async clear(): Promise<void> {
-    // 메모리 캐시 초기화
+    // Clean up memory cache
     this.cache.clear();
 
-    // IndexedDB 캐시 초기화
+    // Clean up IndexedDB cache
     if (
       this.storageType === CacheStorageType.INDEXED_DB ||
       this.storageType === CacheStorageType.HYBRID
@@ -622,19 +602,19 @@ export class ImageCache {
           const tx = this.db.transaction(STORE_NAME, "readwrite");
           const store = tx.objectStore(STORE_NAME);
           store.clear();
-          this.logDebug("IndexedDB 캐시 초기화 완료");
+          this.logDebug("Cleaned up IndexedDB cache");
         } catch (err) {
-          this.logDebug(`IndexedDB 캐시 초기화 오류: ${err}`);
+          this.logDebug(`IndexedDB cache cleanup error: ${err}`);
         }
       }
     }
 
-    this.logDebug("캐시 초기화 완료");
+    this.logDebug("Cache initialization complete");
   }
 
   /**
-   * 캐시 스토리지 타입 변경
-   * @param storageType 새 스토리지 타입
+   * Change cache storage type
+   * @param storageType New storage type
    */
   async setStorageType(storageType: CacheStorageType): Promise<void> {
     if (storageType === this.storageType) {
@@ -643,7 +623,7 @@ export class ImageCache {
 
     this.storageType = storageType;
 
-    // IndexedDB 사용하는 경우 초기화
+    // Initialize IndexedDB if needed
     if (
       storageType === CacheStorageType.INDEXED_DB ||
       storageType === CacheStorageType.HYBRID
@@ -651,28 +631,28 @@ export class ImageCache {
       await this.initIndexedDB();
     }
 
-    this.logDebug(`캐시 스토리지 타입 변경: ${storageType}`);
+    this.logDebug(`Changed cache storage type: ${storageType}`);
   }
 
   /**
-   * 리소스 정리
+   * Clean up resources
    */
   dispose(): void {
-    // 타이머 정리
+    // Clean up timer
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
     }
 
-    // IndexedDB 연결 종료
+    // Close IndexedDB connection
     if (this.db) {
       this.db.close();
       this.db = null;
     }
 
-    // 메모리 캐시 초기화
+    // Clean up memory cache
     this.cache.clear();
 
-    this.logDebug("캐시 리소스 정리 완료");
+    this.logDebug("Cache resource cleanup complete");
   }
 }

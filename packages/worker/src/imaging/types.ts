@@ -1,143 +1,216 @@
 /**
- * 이미지 처리 모듈 타입 정의
+ * Image Processing Module Type Definitions
  */
 
 /**
- * 스케일링 알고리즘 유형
- */
-export enum ScalingAlgorithm {
-  /** 최근접 이웃 (가장 빠르지만 품질이 낮음) */
-  NEAREST_NEIGHBOR = "nearest",
-  /** 바이리니어 (중간 품질과 속도) */
-  BILINEAR = "bilinear",
-  /** 바이큐빅 (높은 품질) */
-  BICUBIC = "bicubic",
-  /** 랑초스 (가장 높은 품질) */
-  LANCZOS = "lanczos",
-}
-
-/**
- * 이미지 포맷 유형
+ * Image Format Types
  */
 export enum ImageFormat {
-  /** JPEG 이미지 포맷 */
+  /** JPEG image format */
   JPEG = "image/jpeg",
-  /** PNG 이미지 포맷 */
+  /** PNG image format */
   PNG = "image/png",
-  /** WebP 이미지 포맷 */
+  /** WebP image format */
   WEBP = "image/webp",
 }
 
 /**
- * 이미지 처리 옵션
+ * Image Processing Options Interface
  */
 export interface ImageProcessingOptions {
-  /** 너비 (픽셀) */
+  /** Width (pixels) */
   width?: number;
-  /** 높이 (픽셀) */
+  /** Height (pixels) */
   height?: number;
-  /** 가로세로 비율 유지 여부 */
+  /** Whether to maintain aspect ratio */
   maintainAspectRatio?: boolean;
-  /** 스케일링 알고리즘 */
-  algorithm?: ScalingAlgorithm;
-  /** 이미지 품질 (0-1) */
-  quality?: number;
-  /** 출력 포맷 */
+  /** Output format */
   format?: ImageFormat;
-  /** 진행 상황 콜백 */
+  /** Image quality (0-1) */
+  quality?: number;
+  /** Progress callback function */
   onProgress?: (progress: number) => void;
-  /** 이산 스케일 사용 여부 (최적화) */
+  /** Whether to use discrete scales (optimization) */
   useDiscreteScales?: boolean;
-  /** 이산 스케일 오버라이드 값 */
+  /** Discrete scales override values */
   discreteScalesOverride?: Record<string, number>;
-  /** 화면 크기 (뷰포트) 너비 */
+  /** Viewport bound width */
   boundWidth?: number;
-  /** 화면 크기 (뷰포트) 높이 */
+  /** Viewport bound height */
   boundHeight?: number;
-  /** 기기 픽셀 비율 (DPR) */
+  /** Device pixel ratio (DPR) */
   devicePixelRatio?: number;
 }
 
 /**
- * 캐시 스토리지 유형
+ * Cache Storage Type
  */
 export enum CacheStorageType {
-  /** 메모리 기반 캐시 */
+  /** Memory-based cache */
   MEMORY = "memory",
-  /** IndexedDB 기반 캐시 */
+  /** IndexedDB-based cache */
   INDEXED_DB = "indexeddb",
-  /** 하이브리드 캐시 (메모리 + IndexedDB) */
+  /** Hybrid cache (memory + IndexedDB) */
   HYBRID = "hybrid",
 }
 
 /**
- * 이미지 메타데이터
+ * Unified Image Processing Result Interface
+ * Combines previous ImageProcessingResult and ProcessingResult interfaces
  */
-export interface ImageMetadata {
-  /** 원본 너비 */
-  originalWidth: number;
-  /** 원본 높이 */
-  originalHeight: number;
-  /** 원본 포맷 */
-  originalFormat: string;
-  /** 처리된 너비 */
-  processedWidth: number;
-  /** 처리된 높이 */
-  processedHeight: number;
-  /** 처리 시간 (ms) */
-  processingTime: number;
-  /** 캐시에서 로드되었는지 여부 */
+export interface ProcessingResult {
+  /** Processed image data (Base64 string) */
+  data: string;
+  /** Width (pixels) */
+  width: number;
+  /** Height (pixels) */
+  height: number;
+  /** Image format */
+  format: ImageFormat;
+  /** Original width (optional) */
+  originalWidth?: number;
+  /** Original height (optional) */
+  originalHeight?: number;
+  /** Processing time (milliseconds) */
+  processingTime?: number;
+  /** Whether loaded from cache */
   fromCache?: boolean;
 }
 
 /**
- * 이미지 처리 결과
- */
-export interface ImageProcessingResult {
-  /** 처리된 이미지 데이터 (Blob, ArrayBuffer 또는 Base64 문자열) */
-  data: Blob | ArrayBuffer | string;
-  /** 이미지 메타데이터 */
-  metadata: ImageMetadata;
-}
-
-/**
- * 워커 태스크 타입
+ * Worker Task Type
  */
 export enum ImageTaskType {
-  /** 이미지 스케일링 */
+  /** Image scaling */
   SCALE = "scale",
-  /** 이미지 포맷 변환 */
+  /** Image format conversion */
   CONVERT = "convert",
-  /** 이미지 효과 적용 */
+  /** Apply image effect */
   APPLY_EFFECT = "apply_effect",
 }
 
 /**
- * 워커 태스크 요청 메시지
+ * Worker Task Request Message
  */
 export interface ImageTaskRequest {
-  /** 태스크 유형 */
+  /** Task type */
   type: ImageTaskType;
-  /** 태스크 ID */
+  /** Task ID */
   taskId: string;
-  /** 이미지 데이터 (ArrayBuffer 또는 ImageData) */
-  imageData: ArrayBuffer | ImageData;
-  /** 처리 옵션 */
+  /** Image data (URL string) */
+  imageData: string;
+  /** Processing options */
   options: ImageProcessingOptions;
 }
 
 /**
- * 워커 태스크 응답 메시지
+ * Worker Task Response Message
  */
 export interface ImageTaskResponse {
-  /** 태스크 유형 */
+  /** Task type */
   type: "taskCompleted" | "taskFailed" | "taskProgress";
-  /** 태스크 ID */
+  /** Task ID */
   taskId: string;
-  /** 처리 결과 (완료 시) */
-  result?: ImageProcessingResult;
-  /** 에러 메시지 (실패 시) */
+  /** Processing result (when completed) */
+  result?: ProcessingResult;
+  /** Error message (when failed) */
   error?: string;
-  /** 진행 상황 (0-1) */
+  /** Progress (0-1) */
   progress?: number;
+}
+
+/**
+ * Task Retry Event Data
+ */
+export interface TaskRetryEvent {
+  /** Task ID */
+  taskId: string;
+  /** Current retry count */
+  retryCount: number;
+  /** Maximum retries allowed */
+  maxRetries: number;
+  /** Delay before next retry (ms) */
+  nextDelay: number;
+  /** Error message */
+  error?: string;
+}
+
+import { TaskStatus, TaskPriority } from "../types/index.js";
+
+export type ImageSource = string | Blob | ArrayBuffer | ImageData;
+
+export enum WorkerType {
+  IMAGE = "image",
+  VIDEO = "video",
+}
+
+export interface ImageProcessor {
+  generateImageId(
+    imageData: Blob | ArrayBuffer | ImageData | string,
+    sourceUrl?: string
+  ): string;
+}
+
+/**
+ * Image Processor Event Constants
+ * Defines event names as string constants for type safety
+ */
+export const ImageProcessorEvents = {
+  /** Ready event */
+  READY: "ready",
+  /** Error event */
+  ERROR: "error",
+  /** Task start event */
+  TASK_START: "taskStart",
+  /** Task progress event */
+  TASK_PROGRESS: "taskProgress",
+  /** Task complete event */
+  TASK_COMPLETE: "taskComplete",
+  /** Task fail event */
+  TASK_FAIL: "taskFail",
+  /** Task retry event */
+  TASK_RETRY: "taskRetry",
+  /** Cache hit event */
+  CACHE_HIT: "cacheHit",
+  /** Cache miss event */
+  CACHE_MISS: "cacheMiss",
+} as const;
+
+export type ImageProcessorEvent =
+  (typeof ImageProcessorEvents)[keyof typeof ImageProcessorEvents];
+
+/**
+ * Cache Options Interface
+ */
+export interface CacheOptions {
+  /** Cache storage type */
+  storageType: CacheStorageType;
+  /** Maximum cache size */
+  maxSize?: number;
+  /** Cache item expiry time (ms) */
+  expiryTime?: number;
+  /** Whether to use compression */
+  compression?: boolean;
+}
+
+/**
+ * Cache Statistics Interface
+ */
+export interface ImageCacheStats {
+  /** Number of cache items */
+  size: number;
+  /** Memory cache hit count */
+  memoryHits: number;
+  /** Memory cache miss count */
+  memoryMisses: number;
+  /** IndexedDB cache hit count */
+  dbHits: number;
+  /** IndexedDB cache miss count */
+  dbMisses: number;
+  /** Cache eviction count */
+  evictions: number;
+  /** Total hit count */
+  totalHits: number;
+  /** Total miss count */
+  totalMisses: number;
 }

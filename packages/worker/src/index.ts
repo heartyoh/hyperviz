@@ -18,7 +18,6 @@ export {
 
 // 이미지 처리 모듈 내보내기
 export * from "./imaging/image-processor.js";
-export * from "./imaging/scaling-algorithms.js";
 export * from "./imaging/image-cache.js";
 
 // OffscreenCanvas 모듈 내보내기

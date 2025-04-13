@@ -88,6 +88,19 @@ export interface IWorker {
   isAvailable(): boolean;
 
   /**
+   * 태스크 상태 업데이트
+   * @param taskId 태스크 ID
+   * @param status 새로운 상태
+   */
+  updateTaskStatus(taskId: string, status: TaskStatus): void;
+
+  /**
+   * 태스크 정보 가져오기
+   * @param taskId 태스크 ID
+   */
+  getTask(taskId: string): Task<any, any> | undefined;
+
+  /**
    * 이벤트 리스너 등록
    * @param event 이벤트 이름
    * @param listener 리스너 함수

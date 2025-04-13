@@ -4,6 +4,7 @@ import {
   WorkerEvents,
   WorkerStatus,
   Task,
+  TaskStatus,
 } from "../types/index.js";
 import { IWorker } from "../types/interfaces.js";
 import { StreamMessageType } from "../types/stream.js";
@@ -82,6 +83,9 @@ export class WorkerAdapter extends EventEmitter implements IWorker {
 
   /** 마지막 활동 시간 */
   lastActiveAt: number = Date.now();
+
+  /** 현재 실행 중인 태스크 */
+  currentTask?: Task<any, any>;
 
   /**
    * 워커 상태 속성
@@ -429,11 +433,38 @@ export class WorkerAdapter extends EventEmitter implements IWorker {
    * 워커가 사용 가능한지 확인
    */
   isAvailable(): boolean {
-    return (
-      !this.terminated &&
-      this._status !== WorkerStatus.ERROR &&
-      this._status !== WorkerStatus.TERMINATING
-    );
+    return this._status === WorkerStatus.IDLE;
+  }
+
+  /**
+   * 태스크 상태 업데이트
+   * @param taskId 태스크 ID
+   * @param status 새로운 상태
+   */
+  updateTaskStatus(taskId: string, status: TaskStatus): void {
+    if (this.currentTask && this.currentTask.id === taskId) {
+      this.currentTask.status = status;
+    }
+  }
+
+  /**
+   * 태스크 정보 가져오기
+   * @param taskId 태스크 ID
+   */
+  getTask(taskId: string): Task<any, any> | undefined {
+    if (this.currentTask && this.currentTask.id === taskId) {
+      return this.currentTask;
+    }
+    return undefined;
+  }
+
+  /**
+   * 이벤트 리스너 등록
+   * @param event 이벤트 이름
+   * @param listener 리스너 함수
+   */
+  on(event: string | symbol, listener: (...args: any[]) => void): this {
+    return super.on(event, listener);
   }
 }
 

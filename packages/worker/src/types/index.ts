@@ -78,6 +78,8 @@ export interface TaskOptions {
   timeout?: number;
   /** 재시도 횟수 */
   retries?: number;
+  /** Transferable 객체 배열 */
+  transferables?: Transferable[];
 }
 
 /**

@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebGL 3D 큐브 오프스크린 캔버스 데모</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background-color: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      h1 {
+        text-align: center;
+        color: #333;
+      }
+
+      .canvas-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 20px;
+        width: 100%;
+        max-width: 100%;
+        position: relative;
+      }
+
+      canvas {
+        border: 1px solid #ddd;
+        margin-bottom: 10px;
+        background-color: black;
+        max-width: 100%;
+        touch-action: none;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 20px;
+        padding: 15px;
+        background-color: #f0f0f0;
+        border-radius: 5px;
+      }
+
+      .control-group {
+        display: flex;
+        flex-direction: column;
+        min-width: 120px;
+      }
+
+      label {
+        font-size: 14px;
+        margin-bottom: 5px;
+        color: #555;
+      }
+
+      button {
+        padding: 8px 15px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.3s;
+      }
+
+      button:hover {
+        background-color: #45a049;
+      }
+
+      button:active {
+        background-color: #3e8e41;
+      }
+
+      input,
+      select {
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+
+      input[type="range"] {
+        width: 100%;
+      }
+
+      .log-container {
+        border: 1px solid #ddd;
+        padding: 10px;
+        height: 150px;
+        overflow-y: auto;
+        font-family: monospace;
+        background-color: #f9f9f9;
+        border-radius: 4px;
+      }
+
+      .log-entry {
+        margin: 5px 0;
+        padding: 3px 5px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .log-entry.info {
+        color: #0066cc;
+      }
+
+      .log-entry.error {
+        color: #cc0000;
+      }
+
+      .log-entry.success {
+        color: #008800;
+      }
+
+      .stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-top: 10px;
+        padding: 10px;
+        background-color: #e9f7ef;
+        border-radius: 4px;
+      }
+
+      .stat-item {
+        display: flex;
+        flex-direction: column;
+        min-width: 120px;
+      }
+
+      .stat-value {
+        font-weight: bold;
+        font-size: 20px;
+        color: #333;
+      }
+
+      .stat-label {
+        font-size: 12px;
+        color: #666;
+      }
+
+      .no-support-message {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(255, 255, 255, 0.9);
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        text-align: center;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>WebGL 3D 큐브 오프스크린 캔버스 데모</h1>
+
+      <div class="canvas-container">
+        <canvas id="webglCanvas" width="800" height="600"></canvas>
+        <div class="no-support-message" id="noSupportMessage">
+          <h2>오류</h2>
+          <p>
+            이 브라우저는 OffscreenCanvas 또는 WebGL을 지원하지 않습니다. 최신
+            버전의 Chrome, Edge 또는 Firefox를 사용해 주세요.
+          </p>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="control-group">
+          <label for="rotationX">X축 회전</label>
+          <input
+            type="range"
+            id="rotationX"
+            min="-180"
+            max="180"
+            value="0"
+            step="1"
+          />
+        </div>
+
+        <div class="control-group">
+          <label for="rotationY">Y축 회전</label>
+          <input
+            type="range"
+            id="rotationY"
+            min="-180"
+            max="180"
+            value="0"
+            step="1"
+          />
+        </div>
+
+        <div class="control-group">
+          <label for="rotationZ">Z축 회전</label>
+          <input
+            type="range"
+            id="rotationZ"
+            min="-180"
+            max="180"
+            value="0"
+            step="1"
+          />
+        </div>
+
+        <div class="control-group">
+          <label for="zoom">줌</label>
+          <input
+            type="range"
+            id="zoom"
+            min="-10"
+            max="-1"
+            value="-6"
+            step="0.1"
+          />
+        </div>
+
+        <div class="control-group">
+          <button id="animationButton">애니메이션 토글</button>
+        </div>
+
+        <div class="control-group">
+          <button id="resetButton">초기화</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat-item">
+          <div class="stat-value" id="renderCount">0</div>
+          <div class="stat-label">렌더링 횟수</div>
+        </div>
+
+        <div class="stat-item">
+          <div class="stat-value" id="fps">0</div>
+          <div class="stat-label">FPS</div>
+        </div>
+
+        <div class="stat-item">
+          <div class="stat-value" id="webglInfo">-</div>
+          <div class="stat-label">WebGL 정보</div>
+        </div>
+      </div>
+
+      <h2>로그</h2>
+      <div class="log-container" id="logContainer"></div>
+    </div>
+
+    <!-- importmap 추가 -->
+    <!-- importmap 추가 -->
+    <script type="importmap">
+      {
+        "imports": {
+          "eventemitter3": "https://esm.sh/eventemitter3@5.0.1",
+          "crypto": "https://esm.sh/crypto-browserify@3.12.0"
+        }
+      }
+    </script>
+
+    <script type="module">
+      // HyperViz 워커 모듈 가져오기
+      import {
+        OffscreenCanvasManager,
+        CanvasContextType,
+        CanvasCommandType,
+      } from "../dist/index.js";
+
+      // DOM 요소
+      const canvas = document.getElementById("webglCanvas");
+      const rotationXInput = document.getElementById("rotationX");
+      const rotationYInput = document.getElementById("rotationY");
+      const rotationZInput = document.getElementById("rotationZ");
+      const zoomInput = document.getElementById("zoom");
+      const animationButton = document.getElementById("animationButton");
+      const resetButton = document.getElementById("resetButton");
+      const renderCountElement = document.getElementById("renderCount");
+      const fpsElement = document.getElementById("fps");
+      const webglInfoElement = document.getElementById("webglInfo");
+      const logContainer = document.getElementById("logContainer");
+      const noSupportMessage = document.getElementById("noSupportMessage");
+
+      // 상태 변수
+      let canvasManager = null;
+      let isAnimating = false;
+      let renderCount = 0;
+      let frameCount = 0;
+      let lastFpsUpdateTime = 0;
+      let animationId = null;
+      let lastTimestamp = 0;
+      let isDragging = false;
+      let lastMouseX = 0;
+      let lastMouseY = 0;
+      let currentRotation = { x: 0, y: 0, z: 0 };
+      let currentZoom = -6;
+
+      // 로그 함수
+      function log(message, type = "info") {
+        console.log(`[WebGL Demo] ${message}`);
+        const entry = document.createElement("div");
+        entry.classList.add("log-entry", type);
+        entry.textContent = message;
+        logContainer.appendChild(entry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+      }
+
+      // OffscreenCanvas 지원 확인
+      function checkOffscreenCanvasSupport() {
+        const canvas = document.createElement("canvas");
+        return (
+          typeof canvas.transferControlToOffscreen === "function" &&
+          typeof OffscreenCanvas !== "undefined"
+        );
+      }
+
+      // 초기화 함수
+      async function initialize() {
+        if (!checkOffscreenCanvasSupport()) {
+          log("브라우저가 OffscreenCanvas를 지원하지 않습니다.", "error");
+          noSupportMessage.style.display = "block";
+          return false;
+        }
+
+        try {
+          log("3D 큐브 데모 초기화 중...");
+
+          // OffscreenCanvas 매니저 생성
+          canvasManager = new OffscreenCanvasManager({
+            canvas: canvas,
+            contextType: CanvasContextType.CONTEXT_WEBGL2,
+            workerUrl: "../dist/offcanvas/worker-scripts/webgl-worker.js",
+            workerOptions: {
+              type: "module",
+            },
+            debug: true,
+            contextAttributes: {
+              alpha: true,
+              depth: true,
+              antialias: true,
+            },
+          });
+
+          // 이벤트 리스너 설정
+          canvasManager.on("ready", () => {
+            log("OffscreenCanvas 매니저가 준비되었습니다.", "success");
+            setupEventListeners();
+            renderFrame();
+          });
+
+          canvasManager.on("error", (error) => {
+            log(`오류 발생: ${error.message || "알 수 없는 오류"}`, "error");
+          });
+
+          canvasManager.on("renderComplete", () => {
+            renderCount++;
+            renderCountElement.textContent = renderCount.toString();
+          });
+
+          log("초기화가 완료되었습니다.");
+          return true;
+        } catch (error) {
+          log(`초기화 중 오류 발생: ${error.message}`, "error");
+          return false;
+        }
+      }
+
+      // 이벤트 리스너 설정
+      function setupEventListeners() {
+        // 슬라이더 이벤트
+        rotationXInput.addEventListener("input", updateCubeFromInputs);
+        rotationYInput.addEventListener("input", updateCubeFromInputs);
+        rotationZInput.addEventListener("input", updateCubeFromInputs);
+        zoomInput.addEventListener("input", updateCubeFromInputs);
+
+        // 버튼 이벤트
+        animationButton.addEventListener("click", toggleAnimation);
+        resetButton.addEventListener("click", resetView);
+
+        // 마우스 드래그 이벤트
+        canvas.addEventListener("mousedown", handleMouseDown);
+        canvas.addEventListener("mousemove", handleMouseMove);
+        canvas.addEventListener("mouseup", handleMouseUp);
+        canvas.addEventListener("mouseleave", handleMouseUp);
+
+        // 터치 이벤트
+        canvas.addEventListener("touchstart", handleTouchStart);
+        canvas.addEventListener("touchmove", handleTouchMove);
+        canvas.addEventListener("touchend", handleTouchEnd);
+      }
+
+      // 입력값에서 큐브 업데이트
+      function updateCubeFromInputs() {
+        // 슬라이더 값 가져오기
+        currentRotation.x = parseFloat(rotationXInput.value);
+        currentRotation.y = parseFloat(rotationYInput.value);
+        currentRotation.z = parseFloat(rotationZInput.value);
+        currentZoom = parseFloat(zoomInput.value);
+
+        // 렌더링
+        renderFrame();
+      }
+
+      // 마우스 이벤트 처리
+      function handleMouseDown(event) {
+        isDragging = true;
+        lastMouseX = event.clientX;
+        lastMouseY = event.clientY;
+      }
+
+      function handleMouseMove(event) {
+        if (!isDragging) return;
+
+        const deltaX = event.clientX - lastMouseX;
+        const deltaY = event.clientY - lastMouseY;
+        lastMouseX = event.clientX;
+        lastMouseY = event.clientY;
+
+        // 회전 변경
+        currentRotation.y += deltaX * 0.5;
+        currentRotation.x += deltaY * 0.5;
+
+        // 슬라이더 값 업데이트
+        rotationXInput.value = currentRotation.x;
+        rotationYInput.value = currentRotation.y;
+
+        // 즉시 렌더링
+        renderFrame();
+      }
+
+      function handleMouseUp() {
+        isDragging = false;
+      }
+
+      // 터치 이벤트 처리
+      function handleTouchStart(event) {
+        if (event.touches.length === 1) {
+          isDragging = true;
+          lastMouseX = event.touches[0].clientX;
+          lastMouseY = event.touches[0].clientY;
+          event.preventDefault();
+        }
+      }
+
+      function handleTouchMove(event) {
+        if (!isDragging || event.touches.length !== 1) return;
+
+        const deltaX = event.touches[0].clientX - lastMouseX;
+        const deltaY = event.touches[0].clientY - lastMouseY;
+        lastMouseX = event.touches[0].clientX;
+        lastMouseY = event.touches[0].clientY;
+
+        // 회전 변경
+        currentRotation.y += deltaX * 0.5;
+        currentRotation.x += deltaY * 0.5;
+
+        // 슬라이더 값 업데이트
+        rotationXInput.value = currentRotation.x;
+        rotationYInput.value = currentRotation.y;
+
+        // 즉시 렌더링
+        renderFrame();
+        event.preventDefault();
+      }
+
+      function handleTouchEnd() {
+        isDragging = false;
+      }
+
+      // 애니메이션 토글
+      function toggleAnimation() {
+        isAnimating = !isAnimating;
+        animationButton.textContent = isAnimating
+          ? "애니메이션 중지"
+          : "애니메이션 시작";
+
+        if (isAnimating) {
+          log("애니메이션 시작");
+          animationLoop(performance.now());
+        } else {
+          log("애니메이션 중지");
+          cancelAnimationFrame(animationId);
+          animationId = null;
+        }
+      }
+
+      // 뷰 초기화
+      function resetView() {
+        currentRotation = { x: 0, y: 0, z: 0 };
+        currentZoom = -6;
+
+        rotationXInput.value = currentRotation.x;
+        rotationYInput.value = currentRotation.y;
+        rotationZInput.value = currentRotation.z;
+        zoomInput.value = currentZoom;
+
+        log("뷰 초기화됨");
+        renderFrame();
+      }
+
+      // 단일 프레임 렌더링
+      async function renderFrame() {
+        if (!canvasManager) return;
+
+        try {
+          // WebGL 렌더링 명령 전송
+          await canvasManager.sendCommand({
+            type: CanvasCommandType.RENDER,
+            params: {
+              rotation: {
+                x: degToRad(currentRotation.x),
+                y: degToRad(currentRotation.y),
+                z: degToRad(currentRotation.z),
+              },
+              zoom: currentZoom,
+            },
+          });
+
+          // FPS 계산
+          updateFPS();
+        } catch (error) {
+          log(`렌더링 오류: ${error.message || "알 수 없는 오류"}`, "error");
+        }
+      }
+
+      // 애니메이션 루프
+      function animationLoop(timestamp) {
+        if (!isAnimating) return;
+
+        // 시간 경과 계산
+        const elapsed = timestamp - lastTimestamp;
+        if (lastTimestamp === 0 || elapsed > 16) {
+          // ~60fps 목표
+          lastTimestamp = timestamp;
+
+          // 자동 회전 (애니메이션 모드)
+          currentRotation.y += 0.5;
+          if (currentRotation.y > 180) currentRotation.y -= 360;
+
+          // 슬라이더 업데이트
+          rotationYInput.value = currentRotation.y;
+
+          // 렌더링
+          renderFrame();
+        }
+
+        // 다음 프레임 요청
+        animationId = requestAnimationFrame(animationLoop);
+      }
+
+      // FPS 업데이트
+      function updateFPS() {
+        frameCount++;
+        const now = performance.now();
+        const elapsed = now - lastFpsUpdateTime;
+
+        if (elapsed >= 1000) {
+          // 1초마다 FPS 업데이트
+          const fps = Math.round((frameCount * 1000) / elapsed);
+          fpsElement.textContent = fps.toString();
+          frameCount = 0;
+          lastFpsUpdateTime = now;
+        }
+      }
+
+      // 도-라디안 변환
+      function degToRad(degrees) {
+        return (degrees * Math.PI) / 180;
+      }
+
+      // 애플리케이션 시작
+      initialize();
+    </script>
+  </body>
+</html>
