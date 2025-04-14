@@ -551,13 +551,25 @@ function animate(timestamp = 0): void {
   updateParticles(deltaTime);
   renderParticles();
 
-  // 파티클 통계 전송
-  if (particles.length > 0) {
-    sendEvent("stats", {
-      particleCount: particles.length,
-      fps: Math.round(1000 / (deltaTime || 1)),
-    });
+  // 파티클 통계 정보 (FPS와 파티클 수) 전송
+  const fps = Math.round(1000 / (deltaTime || 1));
+  const particleCount = particles.length;
+
+  // 디버그 로그
+  if (DEBUG && particleCount > 0) {
+    console.log(`파티클 통계: 현재 ${particleCount}개, FPS: ${fps}`);
   }
+
+  // 이벤트 형식으로 통계 정보 전송 (HTML에서 event 핸들러로 처리)
+  self.postMessage({
+    type: WorkerMessageType.EVENT,
+    data: {
+      type: "particleStats",
+      particleCount: particleCount, // HTML에서 사용하는 필드명에 맞춤
+      count: particleCount, // 이전 코드와의 호환성을 위해 유지
+      fps: fps,
+    },
+  });
 
   // 애니메이션 계속 실행
   animationFrameId = requestAnimationFrame(animate);
@@ -577,6 +589,37 @@ function updateParticles(deltaTime: number): void {
 
   // 모든 파티클 업데이트
   particles.forEach((p) => {
+    // 특수 움직임 패턴 적용 (색종이 효과)
+    if (p.zigzag) {
+      p.zigzagTime += 0.1;
+      // 지그재그 움직임 강도를 파티클 형태에 따라 조정
+      const intensity = p.zigzagIntensity || 0.1;
+      p.vx += Math.sin(p.zigzagTime) * intensity;
+    }
+
+    if (p.flutter) {
+      p.flutterTime += 0.2;
+      // 더 자연스러운 펄럭임을 위해 cos과 sin 함수 조합
+      const flutterX = Math.sin(p.flutterTime) * 0.05 * p.flutterIntensity;
+      const flutterY =
+        Math.cos(p.flutterTime * 1.3) * 0.02 * p.flutterIntensity;
+
+      p.vx += flutterX;
+      // 세로로 길쭉한 형태는 위아래로도 더 많이 흔들림
+      if (p.shape === "rect-v" || p.shape === "needle") {
+        p.vy += flutterY;
+      }
+    }
+
+    if (p.spiral) {
+      const t = p.life / p.maxLife;
+      const spiral = p.spiralRadius * (1 - t); // 시간이 지남에 따라 나선형 축소
+      // 나선형 움직임에 회전 각도를 고려하여 더 자연스러운 움직임
+      const angle = p.life * 0.1 + (p.rotation || 0);
+      p.vx += Math.sin(angle) * 0.05 * spiral;
+      p.vy += Math.cos(angle) * 0.02 * spiral;
+    }
+
     // 속도 적용
     p.x += p.vx;
     p.y += p.vy;
@@ -585,13 +628,69 @@ function updateParticles(deltaTime: number): void {
     if (effectOptions.type !== "fire" && effectOptions.type !== "smoke") {
       // 불과 연기는 중력의 영향을 받지 않음
       if (effectOptions.gravity) {
-        p.vy += effectOptions.gravity;
+        // 색종이는 형태에 따라 다른 중력과 공기저항 적용
+        if (
+          p.shape === "rectangle" ||
+          p.shape === "rect-h" ||
+          p.shape === "triangle" ||
+          p.shape === "rect-v" ||
+          p.shape === "needle"
+        ) {
+          // 모양에 따라 다른 중력 및 공기저항 적용
+          if (p.shape === "rect-h") {
+            // 가로 직사각형은 높은 공기저항 (천천히 떨어짐)
+            p.vy += effectOptions.gravity * 0.6;
+            p.vy *= 0.985; // 강한 공기저항
+            // 가로 직사각형은 좌우로 더 많이 흔들림
+            p.vx *= 0.99;
+          } else if (p.shape === "needle") {
+            // 바늘형은 옆으로 떨어지는 경향
+            p.vy += effectOptions.gravity * 0.7;
+            p.vy *= 0.99;
+            // 바늘은 수직 방향으로 있을 때 더 빨리 떨어짐, 수평일 때 천천히
+            const verticalFactor = Math.abs(Math.sin(p.rotation || 0));
+            p.vy += effectOptions.gravity * 0.2 * verticalFactor;
+          } else if (p.shape === "rect-v") {
+            // 세로 직사각형은 빠르게 떨어짐
+            p.vy += effectOptions.gravity * 0.85;
+            p.vy *= 0.99;
+            // 세로로 긴 직사각형은 수직 방향으로 정렬되려는 경향
+            const alignmentForce = Math.sin(2 * (p.rotation || 0)) * 0.001;
+            p.rotationSpeed = (p.rotationSpeed || 0) - alignmentForce;
+          } else if (p.shape === "triangle") {
+            // 삼각형은 중간 정도의 공기저항
+            p.vy += effectOptions.gravity * 0.75;
+            p.vy *= 0.99;
+            // 삼각형은 기울어진 방향으로 약간 움직임
+            if (p.rotation) {
+              p.vx += Math.sin(p.rotation) * 0.01;
+            }
+          } else {
+            // 정사각형은 일반적인 중력
+            p.vy += effectOptions.gravity * 0.9;
+          }
+
+          // 수평 속도에 약한 공기저항
+          p.vx *= 0.995;
+        } else {
+          // 일반 파티클은 정상 중력
+          p.vy += effectOptions.gravity;
+        }
       }
     }
 
     // 회전 적용
     if (p.rotation !== undefined && p.rotationSpeed) {
       p.rotation += p.rotationSpeed;
+
+      // 긴 형태인 경우 공기저항으로 회전속도 감소
+      if (
+        p.shape === "rect-h" ||
+        p.shape === "rect-v" ||
+        p.shape === "needle"
+      ) {
+        p.rotationSpeed *= 0.995;
+      }
     }
 
     // 크기 변화 (연기 효과를 위해)
@@ -662,19 +761,41 @@ function renderParticlesWebGL(): void {
 
   // 파티클 타입별로 그룹화하여 최적화
   const defaultParticles = [];
-  const confettiParticles = [];
+  const squareConfetti = [];
+  const rectHorizConfetti = [];
+  const triangleConfetti = [];
+  const rectVertConfetti = [];
+  const needleConfetti = [];
+  const fireParticles = [];
 
   // 파티클 타입별로 분류
   for (let i = 0; i < particles.length; i++) {
-    if (particles[i].shape === "rectangle") {
-      confettiParticles.push(particles[i]);
+    if (particles[i].type === "fire") {
+      fireParticles.push(particles[i]);
+    } else if (particles[i].shape === "rectangle") {
+      squareConfetti.push(particles[i]);
+    } else if (particles[i].shape === "rect-h") {
+      rectHorizConfetti.push(particles[i]);
+    } else if (particles[i].shape === "triangle") {
+      triangleConfetti.push(particles[i]);
+    } else if (particles[i].shape === "rect-v") {
+      rectVertConfetti.push(particles[i]);
+    } else if (particles[i].shape === "needle") {
+      needleConfetti.push(particles[i]);
     } else {
       defaultParticles.push(particles[i]);
     }
   }
 
+  // 블렌딩 활성화 - 투명도 지원
+  gl.enable(gl.BLEND);
+  // 가산 블렌딩 모드 (불꽃과 같은 밝은 효과에 적합)
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
   // 일반 원형 파티클 렌더링
   if (defaultParticles.length > 0) {
+    // 원형 모양으로 설정
+    shaderProgram.setUniform1i("uShape", 0);
     updateParticleBuffers(defaultParticles);
 
     if (particleVAO && vaoHelper) {
@@ -684,41 +805,92 @@ function renderParticlesWebGL(): void {
     }
   }
 
-  // 사각형 파티클 (confetti) 렌더링 - 이 경우 개별적으로 렌더링
-  if (confettiParticles.length > 0 && renderer) {
-    // 블렌딩 활성화 - 투명도 지원
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  // 정사각형 색종이 파티클 렌더링
+  if (squareConfetti.length > 0) {
+    // 사각형 모양으로 설정
+    shaderProgram.setUniform1i("uShape", 1);
+    updateParticleBuffers(squareConfetti);
 
-    // 각 사각형 파티클을 개별적으로 렌더링
-    for (const particle of confettiParticles) {
-      // 이 부분에서는 간단하게 구현하기 위해 점으로 렌더링
-      // 실제로는 사각형 메시를 생성하고 회전 변환 등을 적용해야 함
-      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-      const positionData = new Float32Array([particle.x, particle.y]);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, positionData);
+    if (particleVAO && vaoHelper) {
+      vaoHelper.bindVAO(particleVAO);
+      gl.drawArrays(gl.POINTS, 0, squareConfetti.length);
+      vaoHelper.unbindVAO();
+    }
+  }
 
-      gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
-      const sizeData = new Float32Array([particle.size * 1.5]); // 사각형은 약간 더 크게
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, sizeData);
+  // 가로형 직사각형 색종이 파티클 렌더링
+  if (rectHorizConfetti.length > 0) {
+    // 직사각형 모양으로 설정
+    shaderProgram.setUniform1i("uShape", 3);
+    updateParticleBuffers(rectHorizConfetti);
 
-      const color = parseColor(particle.color);
-      gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-      const colorData = new Float32Array([
-        color.r / 255,
-        color.g / 255,
-        color.b / 255,
-        particle.opacity,
-      ]);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, colorData);
+    if (particleVAO && vaoHelper) {
+      vaoHelper.bindVAO(particleVAO);
+      gl.drawArrays(gl.POINTS, 0, rectHorizConfetti.length);
+      vaoHelper.unbindVAO();
+    }
+  }
 
-      // 하나의 포인트 렌더링
-      gl.drawArrays(gl.POINTS, 0, 1);
+  // 삼각형 색종이 파티클 렌더링
+  if (triangleConfetti.length > 0) {
+    // 삼각형 모양으로 설정
+    shaderProgram.setUniform1i("uShape", 4);
+    updateParticleBuffers(triangleConfetti);
+
+    if (particleVAO && vaoHelper) {
+      vaoHelper.bindVAO(particleVAO);
+      gl.drawArrays(gl.POINTS, 0, triangleConfetti.length);
+      vaoHelper.unbindVAO();
+    }
+  }
+
+  // 세로형 직사각형 색종이 파티클 렌더링
+  if (rectVertConfetti.length > 0) {
+    // 세로형 직사각형 모양으로 설정
+    shaderProgram.setUniform1i("uShape", 5);
+    updateParticleBuffers(rectVertConfetti);
+
+    if (particleVAO && vaoHelper) {
+      vaoHelper.bindVAO(particleVAO);
+      gl.drawArrays(gl.POINTS, 0, rectVertConfetti.length);
+      vaoHelper.unbindVAO();
+    }
+  }
+
+  // 바늘형 색종이 파티클 렌더링
+  if (needleConfetti.length > 0) {
+    // 바늘형 모양으로 설정
+    shaderProgram.setUniform1i("uShape", 6);
+    updateParticleBuffers(needleConfetti);
+
+    if (particleVAO && vaoHelper) {
+      vaoHelper.bindVAO(particleVAO);
+      gl.drawArrays(gl.POINTS, 0, needleConfetti.length);
+      vaoHelper.unbindVAO();
+    }
+  }
+
+  // 불꽃 파티클 렌더링 (가산 블렌딩으로 더 밝은 효과)
+  if (fireParticles.length > 0) {
+    // 가산 블렌딩으로 변경 (더 밝은 불꽃 효과)
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+
+    // 불꽃 모양으로 설정
+    shaderProgram.setUniform1i("uShape", 2);
+    updateParticleBuffers(fireParticles);
+
+    if (particleVAO && vaoHelper) {
+      vaoHelper.bindVAO(particleVAO);
+      gl.drawArrays(gl.POINTS, 0, fireParticles.length);
+      vaoHelper.unbindVAO();
     }
 
-    // 블렌딩 비활성화
-    gl.disable(gl.BLEND);
+    // 원래 블렌딩 모드로 복원
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   }
+
+  // 블렌딩 비활성화
+  gl.disable(gl.BLEND);
 }
 
 /**
@@ -819,6 +991,7 @@ function createEmptyParticleBuffers(maxParticleCount = 10000): boolean {
 
     // 현재 최대 파티클 수 저장
     currentMaxParticleCount = maxParticleCount;
+    console.log(`파티클 버퍼 생성 완료: 최대 ${maxParticleCount}개`);
 
     return true;
   } catch (err) {
@@ -843,11 +1016,14 @@ function updateParticleBuffers(particles: Particle[]): boolean {
       particleCount,
       Math.floor(currentMaxParticleCount * BUFFER_RESIZE_FACTOR)
     );
-    console.log(`Resizing particle buffers to accommodate ${newMax} particles`);
+    console.log(
+      `Resizing particle buffers to accommodate ${newMax} particles (current: ${currentMaxParticleCount}, needed: ${particleCount})`
+    );
 
     if (!createEmptyParticleBuffers(newMax)) {
       console.error("Failed to resize particle buffers");
-      return false;
+      // 안전장치: 현재 파티클 수를 최대 파티클 수로 제한
+      particles.length = currentMaxParticleCount;
     }
   }
 
@@ -871,15 +1047,21 @@ function updateParticleBuffers(particles: Particle[]): boolean {
       colorData[i * 4 + 3] = particles[i].opacity;
     }
 
-    // 버퍼 업데이트
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, positionData);
+    // 버퍼 업데이트 - 안전 검사 추가
+    if (positionData.length > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, positionData);
+    }
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, sizeData);
+    if (sizeData.length > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, sizeData);
+    }
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, colorData);
+    if (colorData.length > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, colorData);
+    }
 
     return true;
   } catch (err) {
@@ -1047,27 +1229,119 @@ function createConfettiParticles(options: any): void {
   // 색종이는 위쪽에서 떨어지는 다채로운 사각형 파티클
   const particlesPerFrame = Math.max(1, Math.floor(options.particleCount / 80));
 
+  // 기본 색상이 설정되지 않았다면 밝고 다양한 색상 사용 (더 다양한 색상 추가)
+  const confettiColors =
+    options.colors.length > 0
+      ? options.colors
+      : [
+          "#ff0000", // 빨강
+          "#ff3300", // 주황빨강
+          "#ff9900", // 주황
+          "#ffcc00", // 황금색
+          "#ffff00", // 노랑
+          "#99cc00", // 라임
+          "#33cc33", // 초록
+          "#00cccc", // 청록
+          "#3399ff", // 하늘
+          "#0066ff", // 파랑
+          "#6600ff", // 진보라
+          "#cc66ff", // 라일락
+          "#ff66cc", // 핑크
+          "#ff0099", // 진분홍
+          "#ffffff", // 흰색
+          "#dddddd", // 은색
+          "#ffcc99", // 살구색
+          "#ffff99", // 연한 노랑
+          "#99ffcc", // 연한 민트
+        ];
+
   for (let i = 0; i < particlesPerFrame; i++) {
-    // 화면 상단 전체에서 생성
+    // 화면 상단 전체에서 생성 (약간의 높이 변화)
     const x = Math.random() * canvasWidth;
-    const y = -20;
+    const y = -10 - Math.random() * 40; // 다양한 높이에서 떨어지기 시작
 
-    // 불규칙한 속도와 방향
-    const vx = (Math.random() - 0.5) * 2;
-    const vy = 1 + Math.random() * 2;
+    // 다양한 모양 랜덤 선택 (확률 조정: 길쭉한 모양들 비중 증가)
+    const shapes = [
+      "rectangle",
+      "rect-h",
+      "triangle",
+      "rect-v",
+      "needle",
+      "rect-h",
+      "rect-v",
+    ];
+    const shapeIndex = Math.floor(Math.random() * shapes.length);
+    const shape = shapes[shapeIndex];
 
-    // 크기는 약간 크게
-    const size = options.size * (0.8 + Math.random() * 1.2);
+    // 불규칙한 속도와 방향 (자연스러운 떨어짐, 다양한 패턴)
+    // 더 넓은 범위의 수평 속도
+    const vx = (Math.random() - 0.5) * (3 + Math.random() * 2);
+    // 다양한 떨어지는 속도
+    const vy = 0.5 + Math.random() * 3.0;
 
-    // 더 긴 수명
-    const life = options.lifeSpan * (1.0 + Math.random() * 0.5);
+    // 크기는 모양에 따라 다르게
+    let size;
+    if (shape === "rectangle") {
+      // 정사각형은 중간 크기
+      size = options.size * (0.7 + Math.random() * 1.0);
+    } else if (shape === "rect-h") {
+      // 가로 직사각형은 크게
+      size = options.size * (1.2 + Math.random() * 1.3);
+    } else if (shape === "rect-v") {
+      // 세로 직사각형은 크게
+      size = options.size * (1.0 + Math.random() * 1.2);
+    } else if (shape === "needle") {
+      // 바늘형은 매우 크게 (길이가 매우 길어보이도록)
+      size = options.size * (1.5 + Math.random() * 1.5);
+    } else {
+      // 삼각형은 작게
+      size = options.size * (0.6 + Math.random() * 0.9);
+    }
+
+    // 수명도 모양에 따라 다르게
+    const lifeFactor =
+      shape === "needle" || shape === "rect-v"
+        ? 1.3
+        : shape === "rect-h"
+        ? 1.2
+        : shape === "rectangle"
+        ? 1.0
+        : 1.1;
+    const life = options.lifeSpan * (0.8 + Math.random() * lifeFactor);
 
     // 다양한 색상 중 랜덤 선택
-    const colors =
-      options.colors.length > 0
-        ? options.colors
-        : ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff"];
-    const colorIndex = Math.floor(Math.random() * colors.length);
+    const colorIndex = Math.floor(Math.random() * confettiColors.length);
+
+    // 다양한 회전 속도 (모양에 따라 다르게)
+    let rotationSpeed;
+    if (shape === "needle") {
+      // 바늘형은 더 빠르게 회전
+      rotationSpeed = (Math.random() - 0.5) * 0.25;
+    } else if (shape === "rect-v" || shape === "rect-h") {
+      // 직사각형은 빠르게
+      rotationSpeed = (Math.random() - 0.5) * 0.2;
+    } else if (shape === "rectangle") {
+      // 정사각형은 중간 속도
+      rotationSpeed = (Math.random() - 0.5) * 0.1;
+    } else {
+      // 삼각형은 느린 속도
+      rotationSpeed = (Math.random() - 0.5) * 0.08;
+    }
+
+    // 특이한 움직임 패턴을 위한 추가 속성
+    const zigzag = Math.random() > 0.65; // 35% 확률로 지그재그 움직임
+    const spiral = Math.random() > 0.75; // 25% 확률로 나선형 움직임
+    const flutter = Math.random() > 0.5; // 50% 확률로 펄럭임 (더 자주 발생)
+
+    // 길쭉한 형태일수록 flutter 효과 강화
+    const flutterIntensity =
+      shape === "needle"
+        ? 1.5 + Math.random() * 2.0
+        : shape === "rect-v"
+        ? 1.2 + Math.random() * 1.5
+        : shape === "rect-h"
+        ? 0.8 + Math.random() * 1.2
+        : 0.5 + Math.random() * 1.0;
 
     particles.push({
       x,
@@ -1075,13 +1349,21 @@ function createConfettiParticles(options: any): void {
       vx,
       vy,
       size,
-      color: colors[colorIndex],
-      opacity: 1,
+      color: confettiColors[colorIndex],
+      opacity: 0.9 + Math.random() * 0.1, // 거의 불투명하게
       life,
       maxLife: life,
-      rotation: Math.random() * Math.PI,
-      rotationSpeed: (Math.random() - 0.5) * 0.1, // 빠른 회전
-      shape: "rectangle", // 사각형 모양 (렌더링 시 처리 필요)
+      rotation: Math.random() * Math.PI * 2, // 0-360도 랜덤 회전
+      rotationSpeed,
+      shape,
+      zigzag,
+      zigzagTime: 0,
+      zigzagIntensity: 0.05 + Math.random() * 0.15, // 지그재그 강도 다양화
+      spiral,
+      spiralRadius: 0.5 + Math.random() * 1.5,
+      flutter,
+      flutterTime: Math.random() * 10, // 시작 시간을 랜덤하게 하여 다양한 패턴 생성
+      flutterIntensity,
     });
   }
 }
@@ -1093,28 +1375,29 @@ function createFireParticles(options: any): void {
   // 불은 아래에서 위로 상승하는 파티클들
   const particlesPerFrame = Math.max(1, Math.floor(options.particleCount / 30));
 
-  // 기본 색상이 설정되지 않았다면 불 색상 사용
+  // 기본 색상이 설정되지 않았다면 불 색상 사용 (좀 더 자연스러운 불꽃 색상)
   const fireColors =
     options.colors.length > 0
       ? options.colors
-      : ["#ff0000", "#ff3300", "#ff6600", "#ff9900", "#ffcc00", "#ffff00"];
+      : ["#ff3300", "#ff6600", "#ff9900", "#ffcc00", "#ffff33"];
 
   for (let i = 0; i < particlesPerFrame; i++) {
     // 이미터 위치 주변에서 생성 (약간의 랜덤성 추가)
-    const x = emitterX + (Math.random() - 0.5) * 30;
-    const y = emitterY + 10; // 약간 아래에서 시작
+    const x = emitterX + (Math.random() - 0.5) * (20 + Math.random() * 15);
+    const y = emitterY + Math.random() * 10; // 약간 아래서부터 시작
 
-    // 위쪽으로 상승하는 속도, 좌우로 약간 흔들림
-    const vx = (Math.random() - 0.5) * 1.5;
-    const vy = -2 - Math.random() * 3; // 음수 값으로 위로 상승
+    // 위쪽으로 상승하는 속도, 좌우로 약간 불규칙하게 흔들림
+    const vx = (Math.random() - 0.5) * 1.2;
+    const vy = -2.5 - Math.random() * 2.5; // 좀 더 빠르게 상승
 
-    // 크기는 불꽃 특성에 맞게 랜덤
-    const size = options.size * (0.5 + Math.random());
+    // 크기는 불꽃 특성에 맞게 다양하게 (불의 불규칙함 표현)
+    const size = options.size * (0.6 + Math.random() * 1.2);
 
-    // 수명은 짧게
-    const life = options.lifeSpan * (0.3 + Math.random() * 0.7);
+    // 수명은 짧게 (불꽃은 빨리 사라짐)
+    const life = options.lifeSpan * (0.3 + Math.random() * 0.5);
 
-    // 색상은 불꽃 색상 중 랜덤 (아래쪽은 더 붉고, 위쪽은 더 노란색)
+    // 색상은 불꽃 색상 중 랜덤 (주로 아래쪽은 빨간색/주황색)
+    // 위치에 따라 색상 선택 (아래쪽은 더 빨갛고, 위쪽은 더 노란색)
     const colorIndex = Math.floor(Math.random() * fireColors.length);
 
     particles.push({
@@ -1124,12 +1407,33 @@ function createFireParticles(options: any): void {
       vy,
       size,
       color: fireColors[colorIndex],
-      opacity: 0.9,
+      opacity: 0.8 + Math.random() * 0.2, // 불투명도 높게
       life,
       maxLife: life,
-      type: "fire", // 파티클 유형으로 fire 추가
-      fadeRate: 0.02 + Math.random() * 0.03, // 빠르게 사라짐
+      type: "fire", // 파티클 유형으로 fire 지정
+      fadeRate: 0.02 + Math.random() * 0.04, // 빠르게 사라짐
+      growRate: -0.2 - Math.random() * 0.3, // 시간이 지날수록 크기 감소
+      shape: "fire", // 불꽃 모양 지정
     });
+
+    // 연기 효과도 가끔 추가 (높은 opacity 값으로 거의 안 보이게)
+    if (Math.random() < 0.2) {
+      const smokeLife = life * 2;
+      particles.push({
+        x,
+        y,
+        vx: vx * 0.5,
+        vy: vy * 0.3,
+        size: size * 1.5,
+        color: "#777777",
+        opacity: 0.05 + Math.random() * 0.05, // 매우 투명하게
+        life: smokeLife,
+        maxLife: smokeLife,
+        type: "smoke",
+        growRate: 0.3 + Math.random() * 0.2,
+        fadeRate: 0.005 + Math.random() * 0.008,
+      });
+    }
   }
 }
 
@@ -1217,16 +1521,116 @@ function initializeParticleShaders(): void {
     precision mediump float;
     varying vec4 vColor;
     
+    uniform int uShape; // 0: 원형, 1: 사각형, 2: 불꽃, 3: 직사각형(가로), 4: 삼각형, 5: 직사각형(세로), 6: 바늘형
+    
     void main() {
-      // 기본 원형 파티클
-      float dist = length(gl_PointCoord - vec2(0.5, 0.5));
-      if (dist > 0.5) {
-        discard;
-      }
+      vec2 coord = gl_PointCoord - vec2(0.5, 0.5);
+      float dist = length(coord);
       
-      // 부드러운 가장자리 효과
-      float alpha = smoothstep(0.5, 0.4, dist);
-      gl_FragColor = vec4(vColor.rgb, vColor.a * alpha);
+      // 모양에 따라 다른 렌더링 방식 적용
+      if (uShape == 1) {
+        // 정사각형 색종이
+        float edgeSoftness = 0.05;
+        float rectShape = max(abs(coord.x), abs(coord.y));
+        
+        if (rectShape > 0.4) {
+          discard;
+        }
+        
+        // 사각형 가장자리 부드럽게
+        float alpha = smoothstep(0.4, 0.4 - edgeSoftness, rectShape);
+        gl_FragColor = vec4(vColor.rgb, vColor.a * alpha);
+      } else if (uShape == 2) {
+        // 불꽃 효과 (아래쪽은 더 밝고, 위쪽으로 갈수록 희미해짐)
+        if (dist > 0.5) {
+          discard;
+        }
+        
+        // y 좌표로 그라데이션 계산 (위쪽으로 갈수록 희미해짐)
+        float gradient = smoothstep(0.5, -0.2, coord.y);
+        
+        // 중앙은 더 밝고, 가장자리는 희미하게
+        float centerGlow = smoothstep(0.5, 0.2, dist);
+        
+        // 두 효과 조합
+        float fireEffect = centerGlow * gradient;
+        
+        // 최종 알파 계산
+        float alpha = smoothstep(0.5, 0.0, dist) * fireEffect;
+        
+        // 불꽃 색상 조정 (위쪽은 더 밝게)
+        vec3 flameColor = mix(vColor.rgb, vec3(1.0, 1.0, 0.6), gradient * 0.7);
+        
+        gl_FragColor = vec4(flameColor, vColor.a * alpha);
+      } else if (uShape == 3) {
+        // 직사각형 색종이 (가로로 더 길게)
+        float edgeSoftness = 0.05;
+        float rectX = abs(coord.x) / 0.3; // x축으로 더 길게(이전보다 더 길쭉하게)
+        float rectY = abs(coord.y) / 0.2; // y축으로 더 짧게
+        float rectShape = max(rectX, rectY);
+        
+        if (rectShape > 1.0) {
+          discard;
+        }
+        
+        // 사각형 가장자리 부드럽게
+        float alpha = smoothstep(1.0, 1.0 - edgeSoftness, rectShape);
+        gl_FragColor = vec4(vColor.rgb, vColor.a * alpha);
+      } else if (uShape == 4) {
+        // 삼각형 색종이 (더 길쭉한 삼각형)
+        // 삼각형 정의 (길쭉한 삼각형)
+        float triangleDist = max(
+          abs(coord.x) * 0.866 + coord.y * 0.3,   // 오른쪽 변 (더 길쭉하게)
+          -coord.y * 1.2                         // 아래 변 (더 길게)
+        );
+        triangleDist = max(triangleDist, coord.x * 0.866 - coord.y * 0.3); // 왼쪽 변
+        
+        if (triangleDist > 0.4) {
+          discard;
+        }
+        
+        // 삼각형 가장자리 부드럽게
+        float edgeSoftness = 0.05;
+        float alpha = smoothstep(0.4, 0.4 - edgeSoftness, triangleDist);
+        gl_FragColor = vec4(vColor.rgb, vColor.a * alpha);
+      } else if (uShape == 5) {
+        // 직사각형 색종이 (세로로 길쭉하게)
+        float edgeSoftness = 0.05;
+        float rectX = abs(coord.x) / 0.18; // x축으로 짧게
+        float rectY = abs(coord.y) / 0.45; // y축으로 길게
+        float rectShape = max(rectX, rectY);
+        
+        if (rectShape > 1.0) {
+          discard;
+        }
+        
+        // 사각형 가장자리 부드럽게
+        float alpha = smoothstep(1.0, 1.0 - edgeSoftness, rectShape);
+        gl_FragColor = vec4(vColor.rgb, vColor.a * alpha);
+      } else if (uShape == 6) {
+        // 바늘 형태의 매우 길쭉한 색종이
+        float edgeSoftness = 0.05;
+        float rectX = abs(coord.x) / 0.10; // x축으로 매우 짧게
+        float rectY = abs(coord.y) / 0.6;  // y축으로 매우 길게
+        float rectShape = max(rectX, rectY);
+        
+        if (rectShape > 1.0) {
+          discard;
+        }
+        
+        // 가장자리 부드럽게
+        float alpha = smoothstep(1.0, 1.0 - edgeSoftness, rectShape);
+        gl_FragColor = vec4(vColor.rgb, vColor.a * alpha);
+      } else {
+        // 기본 원형 파티클
+        if (dist > 0.5) {
+          discard;
+        }
+        
+        // 부드러운 가장자리 효과
+        float alpha = smoothstep(0.5, 0.4, dist);
+        gl_FragColor = vec4(vColor.rgb, vColor.a * alpha);
+      }
     }
   `;
 
@@ -1303,6 +1707,12 @@ function initializeParticleShaders(): void {
         const location = gl!.getUniformLocation(program, name);
         if (location) {
           gl!.uniformMatrix4fv(location, transpose, value);
+        }
+      },
+      setUniform1i: function (name: string, value: number) {
+        const location = gl!.getUniformLocation(program, name);
+        if (location) {
+          gl!.uniform1i(location, value);
         }
       },
     } as unknown as ShaderProgram; // unknown으로 먼저 변환

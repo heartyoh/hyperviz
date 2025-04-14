@@ -381,7 +381,7 @@
 
       <div class="stats">
         <div class="stat-item">
-          <div class="stat-value" id="particleCount">0</div>
+          <div class="stat-value" id="currentParticleCount">0</div>
           <div class="stat-label">현재 파티클 수</div>
         </div>
 
@@ -434,6 +434,9 @@
       const addColorButton = document.getElementById("addColorButton");
       const fpsElement = document.getElementById("fps");
       const particleCountElement = document.getElementById("particleCount");
+      const currentParticleCountElement = document.getElementById(
+        "currentParticleCount"
+      );
       const effectInfoElement = document.getElementById("effectInfo");
 
       // 파라미터 입력 요소들
@@ -536,7 +539,7 @@
           });
 
           canvasManager.on("renderComplete", () => {
-            updateFPS();
+            // FPS 업데이트는 이제 이벤트로 받아옴
           });
 
           canvasManager.on("effectStarted", (data) => {
@@ -556,18 +559,26 @@
             console.log("updatePosition", data);
           });
 
-          canvasManager.on("message", (data) => {
-            if (data.type === "particleStats" && data.count !== undefined) {
-              particleCountElement.textContent = data.count;
+          // 파티클 통계 정보 (FPS, 파티클 수) 처리
+          canvasManager.on("particleStats", (event) => {
+            // 디버그 로그
+            console.log("파티클 통계 이벤트 수신:", event);
+
+            // 파티클 수 업데이트 - particleCount 또는 count 필드를 모두 확인
+            const currentParticleCount = event.count;
+            if (currentParticleCount !== undefined) {
+              currentParticleCountElement.textContent = currentParticleCount;
+            }
+
+            // FPS 업데이트
+            if (event.fps !== undefined) {
+              fpsElement.textContent = event.fps;
             }
           });
 
           canvasManager.on("init", () => {
             log("캔버스가 초기화되었습니다.", "success");
           });
-
-          // 워커 이벤트 추가
-          // canvasManager.on("event", handleWorkerEvent);
 
           log("초기화가 완료되었습니다.");
           return true;
@@ -895,19 +906,10 @@
         );
       }
 
-      // FPS 업데이트
+      // FPS 업데이트 - 클라이언트 측에서는 더 이상 사용하지 않음
       function updateFPS() {
-        frameCount++;
-        const now = performance.now();
-        const elapsed = now - lastFpsUpdateTime;
-
-        if (elapsed >= 1000) {
-          // 1초마다 FPS 업데이트
-          const fps = Math.round((frameCount * 1000) / elapsed);
-          fpsElement.textContent = fps.toString();
-          frameCount = 0;
-          lastFpsUpdateTime = now;
-        }
+        // 워커에서 FPS 정보를 받으므로 여기서는 아무 작업도 하지 않음
+        // 이 함수는 호환성을 위해 유지
       }
 
       // 효과 이름 가져오기
