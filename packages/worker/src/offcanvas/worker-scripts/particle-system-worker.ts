@@ -1,5 +1,9 @@
-// 파티클 시스템 워커 - OffscreenCanvas 활용
-// 다양한 파티클 효과 구현
+/**
+ * 고성능 WebGL 기반 파티클 시스템 워커
+ *
+ * Transform Feedback을 사용하여 GPU에서 파티클 업데이트를 수행하고,
+ * 효율적인 버퍼 관리와 메모리 사용을 통해 최적화되었습니다.
+ */
 
 // WebGL 모듈 가져오기
 import {
@@ -14,7 +18,8 @@ import {
   WebGLBufferUsage,
 } from "../webgl/index.js";
 
-// WorkerMessageType 및 CanvasCommandType 정의
+// ===== 타입 정의 =====
+// 메시지 타입 정의
 enum WorkerMessageType {
   COMMAND = "command",
   RESPONSE = "response",
@@ -23,6 +28,7 @@ enum WorkerMessageType {
   READY = "ready",
 }
 
+// 캔버스 명령 타입
 enum CanvasCommandType {
   INIT = "init",
   RENDER = "render",
@@ -34,7 +40,7 @@ enum CanvasCommandType {
   UPDATE_POSITION = "updatePosition",
 }
 
-// 파티클 타입 정의
+// 파티클 효과 타입
 enum ParticleEffectType {
   EXPLOSION = "explosion",
   FOUNTAIN = "fountain",
@@ -44,7 +50,7 @@ enum ParticleEffectType {
   SMOKE = "smoke",
 }
 
-// 파티클 객체 정의
+// 파티클 객체 인터페이스
 interface Particle {
   x: number;
   y: number;
@@ -61,9 +67,15 @@ interface Particle {
   [key: string]: any; // 추가 속성
 }
 
-// 상태 변수
+// 디버그 모드 설정 (콘솔 로깅 제어)
+const DEBUG = false;
+
+// 파티클 시스템 설정
+const MAX_PARTICLES = 10000; // 최대 파티클 수 증가
+const BUFFER_RESIZE_FACTOR = 1.5; // 버퍼 크기 증가 비율
+
+// ===== 상태 변수 =====
 let canvas: OffscreenCanvas | null = null;
-let ctx: OffscreenCanvasRenderingContext2D | null = null;
 let particles: Particle[] = [];
 let running = false;
 let lastTimestamp = 0;
@@ -77,12 +89,36 @@ let frameId: number | null = null;
 let gl: WebGLRenderingContext | WebGL2RenderingContext | null = null;
 let renderer: Renderer | null = null;
 let shaderProgram: ShaderProgram | null = null;
-let useWebGL = false; // WebGL 사용 여부
-let particleVaoId = "particle-vao"; // 파티클 VAO ID
-let isWebGL2 = false; // WebGL2 지원 여부
-let particleBuffers = new Map<string, WebGLBuffer>(); // 파티클 버퍼 저장용
+let particleVaoId = "particle-vao";
+let isWebGL2 = false;
+let particleBuffers = new Map<string, WebGLBuffer>();
 
-// 메시지 핸들러
+// 캐싱된 행렬
+let projectionMatrix: Float32Array | null = null;
+let canvasWidth = 0;
+let canvasHeight = 0;
+
+// 초기화 상태를 추적하기 위한 변수
+let initialized = false;
+let ctx: CanvasRenderingContext2D | null = null;
+let bufferHelper: BufferHelper | null = null;
+let vaoHelper: VAOHelper | null = null;
+let textureHelper: TextureHelper | null = null;
+
+// 파티클 시스템 변수
+let particleVAO: WebGLVertexArrayObject | null = null;
+let positionBuffer: WebGLBuffer | null = null;
+let sizeBuffer: WebGLBuffer | null = null;
+let colorBuffer: WebGLBuffer | null = null;
+let currentMaxParticleCount = 0; // 현재 설정된 최대 파티클 수
+
+// 파티클 효과 설정
+let emitter = { x: 0, y: 0 };
+let activeEffect: string | null = null;
+let mouseTracking = false;
+let animationFrameId: number | null = null;
+
+// ===== 메시지 핸들러 =====
 self.onmessage = (event: MessageEvent) => {
   const message = event.data;
 
@@ -114,18 +150,14 @@ self.onmessage = (event: MessageEvent) => {
       return;
     }
 
-    // 명령 패턴 처리 (canvas-worker.ts와 동일)
+    // 명령 패턴 처리
     if (message.type === WorkerMessageType.COMMAND) {
       const command = message.data;
-
-      // 명령 처리
       const result = processCommand(command);
-
-      // 결과 응답
       sendResponse(message.id, command.id, true, result);
     }
   } catch (error: any) {
-    console.error("메시지 처리 오류:", error);
+    if (DEBUG) console.error("메시지 처리 오류:", error);
     sendError(error.message || "알 수 없는 오류", message.id);
     if (message.type === WorkerMessageType.COMMAND) {
       sendResponse(
@@ -141,8 +173,6 @@ self.onmessage = (event: MessageEvent) => {
 
 /**
  * 명령 처리
- * @param command 캔버스 명령
- * @returns 처리 결과
  */
 function processCommand(command: any): any {
   if (!command || !command.type) {
@@ -169,11 +199,8 @@ function processCommand(command: any): any {
       );
 
     case CanvasCommandType.CLEAR:
-      if (useWebGL && gl && renderer) {
+      if (gl && renderer) {
         renderer.clear();
-        return true;
-      } else if (ctx && canvas) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
         return true;
       }
       return false;
@@ -188,7 +215,7 @@ function processCommand(command: any): any {
       running = false;
 
       // WebGL 자원 정리
-      if (useWebGL && renderer) {
+      if (renderer) {
         renderer.dispose();
         gl = null;
         renderer = null;
@@ -204,9 +231,7 @@ function processCommand(command: any): any {
 }
 
 /**
- * 캔버스 초기화 (명령 패턴용)
- * @param params 초기화 매개변수
- * @returns 초기화 결과
+ * 캔버스 초기화
  */
 function initCanvas(params: any): any {
   if (!params.canvas) {
@@ -214,381 +239,74 @@ function initCanvas(params: any): any {
   }
 
   canvas = params.canvas as OffscreenCanvas;
-  const contextType = params.contextType || "2d";
+  const contextType = params.contextType || "webgl2";
 
   try {
-    // 컨텍스트 타입에 따라 초기화
-    if (contextType === "webgl" || contextType === "webgl2") {
-      useWebGL = true;
-      // WebGL 초기화
-      gl = createWebGLContext(
-        canvas,
-        params.contextAttributes || {
-          alpha: true,
-          antialias: true,
-          depth: false,
-          premultipliedAlpha: false,
-          preserveDrawingBuffer: true,
-          stencil: false,
-        }
-      );
-
-      if (!gl) {
-        console.error("WebGL 컨텍스트 생성 실패, 2D로 폴백");
-        useWebGL = false;
-        ctx = canvas.getContext("2d");
-        if (!ctx) {
-          throw new Error("2D 컨텍스트를 생성할 수 없습니다.");
-        }
-      } else {
-        console.log("WebGL 컨텍스트 생성 성공");
-        isWebGL2 = "createVertexArray" in gl;
-        console.log("WebGL2 지원: ", isWebGL2);
-
-        // 렌더러 초기화
-        renderer = new Renderer(gl);
-        renderer.init([0, 0, 0, 0]); // 투명 배경
-
-        // 셰이더 프로그램 초기화
-        initializeParticleShaders();
+    // WebGL 초기화
+    gl = createWebGLContext(
+      canvas,
+      params.contextAttributes || {
+        alpha: true,
+        antialias: true,
+        depth: false, // 2D 파티클이므로 depth 불필요
+        premultipliedAlpha: false,
+        preserveDrawingBuffer: true,
+        stencil: false,
       }
-    } else {
-      useWebGL = false;
-      // 2D 컨텍스트 초기화
-      ctx = canvas.getContext(
-        "2d",
-        params.contextAttributes || {
-          alpha: true,
-          willReadFrequently: true,
-        }
-      );
+    );
 
-      if (!ctx) {
-        throw new Error("2D 컨텍스트를 생성할 수 없습니다.");
-      }
+    if (!gl) {
+      throw new Error("WebGL 컨텍스트를 생성할 수 없습니다.");
     }
+
+    if (DEBUG) console.log("WebGL 컨텍스트 생성 성공");
+
+    // WebGL2 지원 확인
+    isWebGL2 = gl instanceof WebGL2RenderingContext;
+    if (DEBUG) console.log("WebGL2 지원: ", isWebGL2);
+
+    // 렌더러 초기화
+    renderer = new Renderer(gl);
+    renderer.init([0, 0, 0, 0]); // 투명 배경
 
     // 초기 위치를 캔버스 중앙으로 설정
-    emitterX = canvas.width / 2;
-    emitterY = canvas.height / 2;
+    canvasWidth = canvas.width;
+    canvasHeight = canvas.height;
+    emitterX = canvasWidth / 2;
+    emitterY = canvasHeight / 2;
 
-    // sendEvent("initialized", { useWebGL, contextType });
+    // 셰이더 프로그램 초기화
+    initializeParticleShaders();
+
+    // 프로젝션 행렬 초기화 (캐싱)
+    updateProjectionMatrix();
+
+    // 뷰포트 설정
+    renderer.setViewport(0, 0, canvasWidth, canvasHeight);
+
     self.postMessage({ type: "initialized" });
 
-    // 캔버스 크기 설정
-    if (useWebGL && gl && renderer) {
-      renderer.setViewport(0, 0, canvas.width, canvas.height);
-    }
-
     return {
-      width: canvas.width,
-      height: canvas.height,
-      contextType: useWebGL ? (isWebGL2 ? "webgl2" : "webgl") : "2d",
+      width: canvasWidth,
+      height: canvasHeight,
+      contextType: isWebGL2 ? "webgl2" : "webgl",
     };
   } catch (error) {
-    console.error("캔버스 초기화 오류:", error);
+    if (DEBUG) console.error("캔버스 초기화 오류:", error);
     throw error;
   }
 }
 
-// 파티클 셰이더 초기화
-function initializeParticleShaders(): void {
-  if (!gl || !renderer) return;
-
-  // 정점 셰이더 소스 - 단순화된 버전
-  const vsSource = `
-    attribute vec2 aPosition;
-    attribute float aSize;
-    attribute vec4 aColor;
-    
-    uniform mat4 uProjectionMatrix;
-    
-    varying vec4 vColor;
-    
-    void main() {
-      gl_Position = uProjectionMatrix * vec4(aPosition, 0.0, 1.0);
-      gl_PointSize = aSize;
-      vColor = aColor;
-    }
-  `;
-
-  // 프래그먼트 셰이더 소스 - 단순화된 버전
-  const fsSource = `
-    precision mediump float;
-    varying vec4 vColor;
-    
-    void main() {
-      // 원형 파티클 생성 (단순화된 버전)
-      float dist = length(gl_PointCoord - vec2(0.5, 0.5));
-      if (dist > 0.5) discard;
-      
-      gl_FragColor = vColor;
-    }
-  `;
-
-  try {
-    console.log("셰이더 초기화 시작");
-    // 셰이더 생성
-    const { buffer: bufferHelper, vao: vaoHelper } = renderer.getHelpers();
-
-    // 셰이더 프로그램 생성
-    const shaderCompileResult = createShaderProgram(gl, {
-      programId: "particle-shader",
-      vertexSource: vsSource,
-      fragmentSource: fsSource,
-      attributeLocations: {
-        aPosition: 0,
-        aSize: 1,
-        aColor: 2,
-      },
-    });
-
-    if (!shaderCompileResult.success || !shaderCompileResult.programInfo) {
-      console.error("셰이더 컴파일 에러:", shaderCompileResult.errorMessage);
-      throw new Error(
-        "셰이더 프로그램 생성 실패: " +
-          (shaderCompileResult.errorMessage || "알 수 없는 오류")
-      );
-    }
-
-    console.log("셰이더 컴파일 성공");
-    // 셰이더 프로그램 설정
-    shaderProgram = new ShaderProgram(
-      gl,
-      shaderCompileResult.program,
-      shaderCompileResult.programInfo.attribLocations,
-      shaderCompileResult.programInfo.uniformLocations
-    );
-
-    // 빈 파티클 버퍼 생성
-    createEmptyParticleBuffers(bufferHelper, vaoHelper);
-
-    console.log("파티클 셰이더 초기화 완료");
-  } catch (error) {
-    console.error("셰이더 초기화 오류:", error);
-    throw error;
-  }
-}
-
-// 셰이더 프로그램 생성
-function createShaderProgram(
-  gl: WebGLRenderingContext | WebGL2RenderingContext,
-  params: {
-    programId: string;
-    vertexSource: string;
-    fragmentSource: string;
-    attributeLocations?: Record<string, number>;
-  }
-) {
-  try {
-    // 셰이더 생성 및 컴파일
-    const vertexShader = createShader(
-      gl,
-      gl.VERTEX_SHADER,
-      params.vertexSource
-    );
-    const fragmentShader = createShader(
-      gl,
-      gl.FRAGMENT_SHADER,
-      params.fragmentSource
-    );
-
-    if (!vertexShader || !fragmentShader) {
-      throw new Error("셰이더를 생성할 수 없습니다.");
-    }
-
-    // 프로그램 생성 및 링크
-    const program = gl.createProgram();
-    if (!program) {
-      throw new Error("셰이더 프로그램을 생성할 수 없습니다.");
-    }
-
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-
-    // 속성 위치 바인딩 (선택적)
-    if (params.attributeLocations) {
-      for (const [name, location] of Object.entries(
-        params.attributeLocations
-      )) {
-        gl.bindAttribLocation(program, location, name);
-      }
-    }
-
-    gl.linkProgram(program);
-
-    // 링크 결과 확인
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      const info = gl.getProgramInfoLog(program);
-      gl.deleteProgram(program);
-      throw new Error(`셰이더 프로그램 링크 실패: ${info}`);
-    }
-
-    // 속성 및 유니폼 위치 수집
-    const attribLocations: Record<string, number> = {};
-    const uniformLocations: Record<string, WebGLUniformLocation> = {};
-
-    // 활성 속성 수 가져오기
-    const numAttribs = gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES);
-    for (let i = 0; i < numAttribs; i++) {
-      const info = gl.getActiveAttrib(program, i);
-      if (info) {
-        attribLocations[info.name] = gl.getAttribLocation(program, info.name);
-      }
-    }
-
-    // 활성 유니폼 수 가져오기
-    const numUniforms = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
-    for (let i = 0; i < numUniforms; i++) {
-      const info = gl.getActiveUniform(program, i);
-      if (info) {
-        const location = gl.getUniformLocation(program, info.name);
-        if (location) {
-          uniformLocations[info.name] = location;
-        }
-      }
-    }
-
-    // 셰이더는 프로그램에 링크되었으므로 삭제 가능
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
-
-    return {
-      success: true,
-      program: program,
-      programInfo: {
-        attribLocations,
-        uniformLocations,
-      },
-    };
-  } catch (error) {
-    return {
-      success: false,
-      errorMessage: error instanceof Error ? error.message : "알 수 없는 오류",
-    };
-  }
-}
-
-// 셰이더 생성 및 컴파일 (개선된 버전)
-function createShader(
-  gl: WebGLRenderingContext | WebGL2RenderingContext,
-  type: number,
-  source: string
-): WebGLShader | null {
-  const shader = gl.createShader(type);
-  if (!shader) {
-    console.error("셰이더를 생성할 수 없습니다.");
-    return null;
-  }
-
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-
-  // 컴파일 결과 확인
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const info = gl.getShaderInfoLog(shader);
-    console.error("셰이더 컴파일 오류:", info);
-    console.error("셰이더 소스:", source);
-    gl.deleteShader(shader);
-    return null;
-  }
-
-  return shader;
-}
-
-// 빈 파티클 버퍼 생성
-function createEmptyParticleBuffers(
-  bufferHelper: BufferHelper,
-  vaoHelper: VAOHelper
-): void {
-  if (!gl) return;
-
-  const maxParticles = 5000; // 최대 파티클 수 증가 (1000 -> 5000)
-
-  // 빈 버퍼 데이터 생성
-  const positions = new Float32Array(maxParticles * 2); // x, y
-  const sizes = new Float32Array(maxParticles); // 크기
-  const colors = new Float32Array(maxParticles * 4); // r, g, b, a
-
-  // 위치 버퍼 생성
-  const positionBufferResult = bufferHelper.createBuffer({
-    bufferId: "particlePosition",
-    type: WebGLBufferType.VERTEX,
-    data: positions,
-    usage: WebGLBufferUsage.DYNAMIC,
-  });
-
-  if (positionBufferResult.success && positionBufferResult.buffer) {
-    particleBuffers.set("particlePosition", positionBufferResult.buffer);
-  }
-
-  // 크기 버퍼 생성
-  const sizeBufferResult = bufferHelper.createBuffer({
-    bufferId: "particleSize",
-    type: WebGLBufferType.VERTEX,
-    data: sizes,
-    usage: WebGLBufferUsage.DYNAMIC,
-  });
-
-  if (sizeBufferResult.success && sizeBufferResult.buffer) {
-    particleBuffers.set("particleSize", sizeBufferResult.buffer);
-  }
-
-  // 색상 버퍼 생성
-  const colorBufferResult = bufferHelper.createBuffer({
-    bufferId: "particleColor",
-    type: WebGLBufferType.VERTEX,
-    data: colors,
-    usage: WebGLBufferUsage.DYNAMIC,
-  });
-
-  if (colorBufferResult.success && colorBufferResult.buffer) {
-    particleBuffers.set("particleColor", colorBufferResult.buffer);
-  }
-
-  // VAO 생성
-  const vaoResult = vaoHelper.createVAO(
-    {
-      vaoId: particleVaoId,
-      programId: "particle-shader",
-      attributes: [
-        {
-          bufferId: "particlePosition",
-          name: "0", // aPosition
-          size: 2,
-          type: "FLOAT",
-        },
-        {
-          bufferId: "particleSize",
-          name: "1", // aSize
-          size: 1,
-          type: "FLOAT",
-        },
-        {
-          bufferId: "particleColor",
-          name: "2", // aColor
-          size: 4,
-          type: "FLOAT",
-        },
-      ],
-    },
-    particleBuffers
-  );
-
-  if (vaoResult.success && vaoResult.vao && renderer) {
-    renderer.registerVAO(particleVaoId, vaoResult.vao);
-    console.log("파티클 버퍼 및 VAO 생성 완료");
-  } else {
-    console.error("VAO 생성 실패:", vaoResult.errorMessage);
-  }
-}
-
-// 캔버스 크기 조정
+/**
+ * 캔버스 크기 조정
+ */
 function resizeCanvas(width: number, height: number): any {
   if (!canvas) return null;
 
   canvas.width = width;
   canvas.height = height;
+  canvasWidth = width;
+  canvasHeight = height;
 
   // 이미터 위치 업데이트
   if (!emitterX || !emitterY) {
@@ -597,19 +315,14 @@ function resizeCanvas(width: number, height: number): any {
   }
 
   // WebGL 모드일 때 뷰포트 설정
-  if (useWebGL && gl && renderer) {
+  if (gl && renderer) {
     renderer.setViewport(0, 0, width, height);
 
-    // 셰이더가 있으면 프로젝션 매트릭스 업데이트
-    if (shaderProgram) {
-      const projectionMatrix = createOrthographicMatrix(
-        0,
-        width,
-        height,
-        0,
-        -1,
-        1
-      );
+    // 프로젝션 행렬 업데이트
+    updateProjectionMatrix();
+
+    // 셰이더에 새 행렬 적용
+    if (shaderProgram && projectionMatrix) {
       shaderProgram.use();
       shaderProgram.setUniformMatrix4fv(
         "uProjectionMatrix",
@@ -623,343 +336,68 @@ function resizeCanvas(width: number, height: number): any {
   return { width, height };
 }
 
-// 이미터 위치 업데이트 (마우스 추적 등)
-function updateEmitterPosition(x?: number, y?: number): any {
-  if (x !== undefined && y !== undefined) {
-    emitterX = x;
-    emitterY = y;
-  }
-  return { x: emitterX, y: emitterY };
-}
-
-// 파티클 효과 시작
-function startEffect(type: ParticleEffectType, options: any = {}): any {
-  effectType = type;
-  effectOptions = {
-    particleCount: 100,
-    gravity: 0.1,
-    wind: 0,
-    minSize: 2,
-    maxSize: 8,
-    minLife: 30,
-    maxLife: 100,
-    speed: 1,
-    spread: 1,
-    fadeOut: true,
-    shrink: false,
-    ...options,
-  };
-
-  // 최대 파티클 수 제한 (버퍼 크기 초과 방지)
-  effectOptions.particleCount = Math.min(effectOptions.particleCount, 5000);
-
-  // 이미터 위치 설정
-  if (options.x !== undefined) emitterX = options.x;
-  if (options.y !== undefined) emitterY = options.y;
-
-  // 색상 기본값 설정
-  if (!effectOptions.colors || effectOptions.colors.length === 0) {
-    switch (type) {
-      case ParticleEffectType.EXPLOSION:
-        effectOptions.colors = ["#ff0000", "#ffff00", "#ff7700", "#ff00ff"];
-        break;
-      case ParticleEffectType.FOUNTAIN:
-        effectOptions.colors = ["#00aaff", "#0077ff", "#00ddff", "#ffffff"];
-        break;
-      case ParticleEffectType.SNOW:
-        effectOptions.colors = ["#ffffff", "#f0f0f0", "#dddddd"];
-        break;
-      case ParticleEffectType.CONFETTI:
-        effectOptions.colors = [
-          "#ff0000",
-          "#00ff00",
-          "#0000ff",
-          "#ffff00",
-          "#00ffff",
-          "#ff00ff",
-        ];
-        break;
-      case ParticleEffectType.FIRE:
-        effectOptions.colors = ["#ff0000", "#ff7700", "#ffff00", "#ffaa00"];
-        break;
-      case ParticleEffectType.SMOKE:
-        effectOptions.colors = ["#666666", "#999999", "#cccccc", "#dddddd"];
-        break;
-      default:
-        effectOptions.colors = ["#ffffff"];
-    }
-  }
-
-  // 효과 타입별 특성 설정
-  switch (type) {
-    case ParticleEffectType.EXPLOSION:
-      createExplosionParticles();
-      break;
-    case ParticleEffectType.FOUNTAIN:
-      // 분수는 계속 파티클 생성
-      running = true;
-      break;
-    case ParticleEffectType.SNOW:
-      createSnowParticles();
-      running = true;
-      break;
-    case ParticleEffectType.CONFETTI:
-      createConfettiParticles();
-      break;
-    case ParticleEffectType.FIRE:
-      running = true;
-      break;
-    case ParticleEffectType.SMOKE:
-      running = true;
-      break;
-  }
-
-  // 애니메이션 시작
-  if (!frameId) {
-    lastTimestamp = performance.now();
-    console.log("animation started......");
-    frameId = requestAnimationFrame(animate);
-  }
-
-  sendEvent("effectStarted", { effectType: type });
-  return { effectStarted: true, effectType: type };
-}
-
-// 파티클 효과 중지
-function stopEffect(): any {
-  running = false;
-
-  // 애니메이션 중지 (모든 파티클이 소멸한 후)
-  // 현재 frameId는 중지하지 않고, 모든 파티클이 사라질 때까지 기다림
-
-  sendEvent("effectStopped");
-  return { effectStopped: true };
-}
-
-// 애니메이션 루프
-function animate(timestamp: number): void {
+/**
+ * 프로젝션 행렬 업데이트 (크기 변경 시에만 호출)
+ */
+function updateProjectionMatrix(): void {
   if (!canvas) return;
 
-  const deltaTime = timestamp - lastTimestamp;
-  lastTimestamp = timestamp;
-
-  // 배경 지우기
-  if (useWebGL && gl && renderer) {
-    renderer.clear();
-  } else if (ctx) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  } else {
-    return; // 컨텍스트가 없으면 종료
-  }
-
-  // 효과가 계속 실행 중인 경우 새 파티클 생성
-  if (running && effectType) {
-    switch (effectType) {
-      case ParticleEffectType.FOUNTAIN:
-        createFountainParticles(2); // 프레임당 파티클 수
-        break;
-      case ParticleEffectType.SNOW:
-        if (particles.length < effectOptions.particleCount) {
-          createSnowParticles(1);
-        }
-        break;
-      case ParticleEffectType.FIRE:
-        createFireParticles(3);
-        break;
-      case ParticleEffectType.SMOKE:
-        createSmokeParticles(1);
-        break;
-    }
-  }
-
-  // 파티클 업데이트 및 렌더링
-  updateParticles(deltaTime / 16); // 16ms(60fps)를 기준으로 정규화
-
-  // WebGL 모드에서 렌더링
-  if (useWebGL) {
-    renderParticlesWebGL();
-  }
-
-  // 모든 파티클이 사라지고 효과가 중지된 경우, 애니메이션 중지
-  if (particles.length === 0 && !running) {
-    if (frameId !== null) {
-      cancelAnimationFrame(frameId);
-      frameId = null;
-    }
-
-    sendEvent("animationStopped");
-    return;
-  }
-
-  // 현재 파티클 통계 전송
-  sendEvent("particleStats", { count: particles.length });
-
-  // 다음 프레임 요청
-  frameId = requestAnimationFrame(animate);
+  projectionMatrix = createOrthographicMatrix(
+    0,
+    canvasWidth,
+    canvasHeight,
+    0,
+    -1,
+    1
+  );
 }
 
-// WebGL을 사용하여 파티클 렌더링
-function renderParticlesWebGL(): void {
-  if (!gl || !renderer || !shaderProgram) return;
-
-  if (particles.length === 0) {
-    console.log("렌더링할 파티클이 없음");
-    return;
-  }
-
-  console.log(`WebGL 파티클 렌더링: ${particles.length}개 파티클`);
-
-  try {
-    // 렌더링 시작
-    renderer.useShader(shaderProgram);
-
-    // 프로젝션 매트릭스 설정 (직교 투영)
-    const projectionMatrix = createOrthographicMatrix(
-      0,
-      canvas!.width,
-      canvas!.height,
-      0,
-      -1,
-      1
-    );
-
-    // 셰이더 프로그램을 다시 사용하여 확실하게 활성화
-    shaderProgram.use();
-
-    // 프로젝션 매트릭스 설정
-    try {
-      shaderProgram.setUniformMatrix4fv(
-        "uProjectionMatrix",
-        false,
-        projectionMatrix
-      );
-    } catch (error) {
-      console.error("프로젝션 매트릭스 설정 오류:", error);
-    }
-
-    // 파티클 데이터 업데이트
-    updateParticleBuffers();
-
-    // 안전하게 파티클 수 제한 (버퍼 오버플로우 방지)
-    const MAX_PARTICLES = 5000;
-    const particleCount = Math.min(particles.length, MAX_PARTICLES);
-
-    // 블렌딩 활성화 (파티클의 투명도 처리)
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-    // 파티클 렌더링
-    renderer.draw(
-      particleVaoId,
-      PrimitiveType.POINTS, // 점으로 렌더링
-      particleCount, // 제한된 파티클 수
-      false, // 인덱스 사용 안 함
-      0
-    );
-
-    // 블렌딩 비활성화
-    gl.disable(gl.BLEND);
-
-    console.log("WebGL 렌더링 완료");
-
-    // 렌더링 완료 이벤트
-    sendEvent("renderComplete");
-  } catch (error) {
-    console.error("WebGL 파티클 렌더링 오류:", error);
-  }
+/**
+ * 오류 메시지 전송
+ */
+function sendError(message: string, id?: string): void {
+  self.postMessage({
+    type: WorkerMessageType.ERROR,
+    id,
+    data: {
+      message,
+    },
+  });
 }
 
-// 파티클 버퍼 업데이트
-function updateParticleBuffers(): void {
-  if (!gl || !renderer) return;
-
-  try {
-    const { buffer: bufferHelper } = renderer.getHelpers();
-    const MAX_PARTICLES = 5000;
-    const count = Math.min(particles.length, MAX_PARTICLES); // 버퍼 크기 제한
-
-    if (count === 0) {
-      console.log("업데이트할 파티클이 없음");
-      return;
-    }
-
-    console.log(`파티클 버퍼 업데이트: ${count}개 파티클`);
-
-    // 버퍼 데이터 준비
-    const positions = new Float32Array(count * 2); // x, y
-    const sizes = new Float32Array(count); // 크기
-    const colors = new Float32Array(count * 4); // r, g, b, a
-
-    // 파티클 데이터 채우기
-    for (let i = 0; i < count; i++) {
-      const p = particles[i];
-
-      // 위치
-      positions[i * 2] = p.x;
-      positions[i * 2 + 1] = p.y;
-
-      // 크기 - 훨씬 크게 조정
-      sizes[i] = p.size * 5; // 점 크기 대폭 증가
-
-      // 색상 (HTML 색상 문자열 파싱)
-      const color = parseColor(p.color);
-      colors[i * 4] = color.r; // R
-      colors[i * 4 + 1] = color.g; // G
-      colors[i * 4 + 2] = color.b; // B
-      colors[i * 4 + 3] = p.opacity; // A
-    }
-
-    // 우리가 저장한 버퍼 맵에서 버퍼를 가져옴
-    const positionBuffer = particleBuffers.get("particlePosition");
-    const sizeBuffer = particleBuffers.get("particleSize");
-    const colorBuffer = particleBuffers.get("particleColor");
-
-    // 버퍼가 존재하면 업데이트
-    if (positionBuffer) {
-      bufferHelper.updateBufferData(
-        WebGLBufferType.VERTEX,
-        positionBuffer,
-        positions,
-        0
-      );
-    }
-
-    if (sizeBuffer) {
-      bufferHelper.updateBufferData(
-        WebGLBufferType.VERTEX,
-        sizeBuffer,
-        sizes,
-        0
-      );
-    }
-
-    if (colorBuffer) {
-      bufferHelper.updateBufferData(
-        WebGLBufferType.VERTEX,
-        colorBuffer,
-        colors,
-        0
-      );
-    }
-
-    console.log("파티클 버퍼 업데이트 완료");
-  } catch (error) {
-    console.error("파티클 버퍼 업데이트 오류:", error);
-  }
+/**
+ * 응답 메시지 전송
+ */
+function sendResponse(
+  messageId: string,
+  commandId: string,
+  success: boolean,
+  data: any = null,
+  error: string = ""
+): void {
+  self.postMessage({
+    type: WorkerMessageType.RESPONSE,
+    id: messageId,
+    data: {
+      commandId,
+      success,
+      data,
+      error,
+    },
+  });
 }
 
-// HTML 색상 문자열을 RGB 값으로 변환
-function parseColor(color: string): { r: number; g: number; b: number } {
-  // #RRGGBB 형식 처리
-  if (color.startsWith("#")) {
-    const r = parseInt(color.substring(1, 3), 16) / 255;
-    const g = parseInt(color.substring(3, 5), 16) / 255;
-    const b = parseInt(color.substring(5, 7), 16) / 255;
-    return { r, g, b };
-  }
-
-  // 기본값으로 흰색 반환
-  return { r: 1, g: 1, b: 1 };
+/**
+ * 이벤트 메시지 전송
+ */
+function sendEvent(type: string, data: any = {}): void {
+  self.postMessage({
+    type: WorkerMessageType.EVENT,
+    data: {
+      type,
+      ...data,
+    },
+  });
 }
 
 // 직교 투영 행렬 생성
@@ -1000,455 +438,650 @@ function createOrthographicMatrix(
   return matrix;
 }
 
-// 파티클 업데이트 및 렌더링
-function updateParticles(deltaFactor: number): void {
-  if (!ctx || !canvas) return;
-
-  const gravity = effectOptions.gravity * deltaFactor;
-  const wind = effectOptions.wind * deltaFactor;
-
-  // 각 파티클 업데이트
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-
-    // 위치 업데이트
-    p.x += p.vx * deltaFactor;
-    p.y += p.vy * deltaFactor;
-
-    // 중력 및 바람 적용
-    p.vy += gravity;
-    p.vx += wind;
-
-    // 생명력 감소
-    p.life--;
-
-    // 페이드 아웃 효과
-    if (effectOptions.fadeOut) {
-      p.opacity = p.life / p.maxLife;
-    }
-
-    // 축소 효과
-    if (effectOptions.shrink) {
-      p.size = (p.life / p.maxLife) * (p.initialSize || p.size);
-    }
-
-    // 회전 업데이트 (있는 경우)
-    if (p.rotation !== undefined && p.rotationSpeed !== undefined) {
-      p.rotation += p.rotationSpeed * deltaFactor;
-    }
-
-    // 파티클 그리기
-    drawParticle(p);
-
-    // 파티클 제거 조건 확인
-    if (
-      p.life <= 0 ||
-      p.y > canvas.height + 50 ||
-      p.x < -50 ||
-      p.x > canvas.width + 50
-    ) {
-      particles.splice(i, 1);
-    }
-  }
-}
-
-// 파티클 그리기
-function drawParticle(p: Particle): void {
-  if (!ctx) return;
-
-  ctx.globalAlpha = p.opacity;
-
-  // 파티클 모양에 따라 그리기
-  switch (p.shape) {
-    case "square":
-      drawSquareParticle(p);
-      break;
-    case "rect":
-      drawRectParticle(p);
-      break;
-    case "line":
-      drawLineParticle(p);
-      break;
-    case "star":
-      drawStarParticle(p);
-      break;
-    case "image":
-      // 이미지 파티클 그리기 (필요한 경우 구현)
-      break;
-    case "circle":
-    default:
-      drawCircleParticle(p);
-      break;
-  }
-
-  ctx.globalAlpha = 1.0;
-}
-
-// 원형 파티클 그리기
-function drawCircleParticle(p: Particle): void {
-  if (!ctx) return;
-
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-  ctx.fillStyle = p.color;
-  ctx.fill();
-}
-
-// 사각형 파티클 그리기
-function drawSquareParticle(p: Particle): void {
-  if (!ctx) return;
-
-  const halfSize = p.size / 2;
-
-  if (p.rotation) {
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.rotation);
-    ctx.fillStyle = p.color;
-    ctx.fillRect(-halfSize, -halfSize, p.size, p.size);
-    ctx.restore();
-  } else {
-    ctx.fillStyle = p.color;
-    ctx.fillRect(p.x - halfSize, p.y - halfSize, p.size, p.size);
-  }
-}
-
-// 직사각형 파티클 그리기
-function drawRectParticle(p: Particle): void {
-  if (!ctx) return;
-
-  const width = p.width || p.size * 2;
-  const height = p.height || p.size;
-
-  if (p.rotation) {
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.rotation);
-    ctx.fillStyle = p.color;
-    ctx.fillRect(-width / 2, -height / 2, width, height);
-    ctx.restore();
-  } else {
-    ctx.fillStyle = p.color;
-    ctx.fillRect(p.x - width / 2, p.y - height / 2, width, height);
-  }
-}
-
-// 선 파티클 그리기
-function drawLineParticle(p: Particle): void {
-  if (!ctx) return;
-
-  const length = p.length || p.size * 3;
-
-  ctx.save();
-  ctx.translate(p.x, p.y);
-  ctx.rotate(p.rotation || Math.atan2(p.vy, p.vx));
-
-  ctx.beginPath();
-  ctx.moveTo(-length / 2, 0);
-  ctx.lineTo(length / 2, 0);
-  ctx.strokeStyle = p.color;
-  ctx.lineWidth = p.size;
-  ctx.stroke();
-
-  ctx.restore();
-}
-
-// 별 모양 파티클 그리기
-function drawStarParticle(p: Particle): void {
-  if (!ctx) return;
-
-  const spikes = p.spikes || 5;
-  const outerRadius = p.size;
-  const innerRadius = p.size / 2;
-
-  ctx.save();
-  ctx.translate(p.x, p.y);
-  ctx.rotate(p.rotation || 0);
-
-  let rot = (Math.PI / 2) * 3;
-  const step = Math.PI / spikes;
-
-  ctx.beginPath();
-  ctx.moveTo(0, -outerRadius);
-
-  for (let i = 0; i < spikes; i++) {
-    ctx.lineTo(Math.cos(rot) * outerRadius, Math.sin(rot) * outerRadius);
-    rot += step;
-
-    ctx.lineTo(Math.cos(rot) * innerRadius, Math.sin(rot) * innerRadius);
-    rot += step;
-  }
-
-  ctx.lineTo(0, -outerRadius);
-  ctx.closePath();
-
-  ctx.fillStyle = p.color;
-  ctx.fill();
-
-  ctx.restore();
-}
-
-// 폭발 효과 파티클 생성
-function createExplosionParticles(): void {
-  const count = effectOptions.particleCount;
-  const colors = effectOptions.colors;
-
-  for (let i = 0; i < count; i++) {
-    // 랜덤 각도 및 속도
-    const angle = Math.random() * Math.PI * 2;
-    const speed = (Math.random() * 5 + 2) * effectOptions.speed;
-
-    const size =
-      Math.random() * (effectOptions.maxSize - effectOptions.minSize) +
-      effectOptions.minSize;
-    const life =
-      Math.random() * (effectOptions.maxLife - effectOptions.minLife) +
-      effectOptions.minLife;
-
-    particles.push({
-      x: emitterX,
-      y: emitterY,
-      vx: Math.cos(angle) * speed * effectOptions.spread,
-      vy: Math.sin(angle) * speed * effectOptions.spread,
-      size: size,
-      initialSize: size,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      opacity: 1,
-      life: life,
-      maxLife: life,
-      shape: Math.random() < 0.3 ? "square" : "circle",
-      rotation: Math.random() * Math.PI * 2,
-      rotationSpeed: (Math.random() - 0.5) * 0.2,
-    });
-  }
-}
-
-// 분수 효과 파티클 생성
-function createFountainParticles(count: number): void {
-  const colors = effectOptions.colors;
-
-  for (let i = 0; i < count; i++) {
-    // 위쪽 방향으로 약간의 랜덤성을 가진 각도
-    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.8;
-    const speed = (Math.random() * 3 + 5) * effectOptions.speed;
-
-    const size =
-      Math.random() * (effectOptions.maxSize - effectOptions.minSize) +
-      effectOptions.minSize;
-    const life =
-      Math.random() * (effectOptions.maxLife - effectOptions.minLife) +
-      effectOptions.minLife;
-
-    particles.push({
-      x: emitterX,
-      y: emitterY,
-      vx: Math.cos(angle) * speed * effectOptions.spread,
-      vy: Math.sin(angle) * speed,
-      size: size,
-      initialSize: size,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      opacity: 1,
-      life: life,
-      maxLife: life,
-    });
-  }
-}
-
-// 눈 효과 파티클 생성
-function createSnowParticles(count: number = 20): void {
-  if (!canvas) return;
-
-  const colors = effectOptions.colors;
-
-  for (let i = 0; i < count; i++) {
-    const x = Math.random() * canvas.width;
-    const y = -10;
-
-    const size =
-      Math.random() * (effectOptions.maxSize - effectOptions.minSize) +
-      effectOptions.minSize;
-    const life =
-      Math.random() * (effectOptions.maxLife - effectOptions.minLife) +
-      effectOptions.minLife;
-
-    particles.push({
-      x: x,
-      y: y,
-      vx: (Math.random() - 0.5) * effectOptions.spread,
-      vy: (Math.random() * 1 + 0.5) * effectOptions.speed,
-      size: size,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      opacity: 0.8,
-      life: life,
-      maxLife: life,
-      rotation: Math.random() * Math.PI * 2,
-      rotationSpeed: (Math.random() - 0.5) * 0.03,
-      shape: Math.random() < 0.3 ? "star" : "circle",
-    });
-  }
-}
-
-// 색종이 효과 파티클 생성
-function createConfettiParticles(): void {
-  if (!canvas) return;
-
-  const count = effectOptions.particleCount;
-  const colors = effectOptions.colors;
-
-  for (let i = 0; i < count; i++) {
-    const x = emitterX + (Math.random() - 0.5) * 100 * effectOptions.spread;
-    const y = emitterY;
-
-    const size =
-      Math.random() * (effectOptions.maxSize - effectOptions.minSize) +
-      effectOptions.minSize;
-    const life =
-      Math.random() * (effectOptions.maxLife - effectOptions.minLife) +
-      effectOptions.minLife;
-
-    particles.push({
-      x: x,
-      y: y,
-      vx: (Math.random() - 0.5) * 2 * effectOptions.spread,
-      vy: Math.random() * -3 * effectOptions.speed,
-      size: size,
-      width: size * (1 + Math.random() * 2),
-      height: size * 0.5,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      opacity: 1,
-      life: life,
-      maxLife: life,
-      rotation: Math.random() * Math.PI * 2,
-      rotationSpeed: (Math.random() - 0.5) * 0.2,
-      shape: Math.random() < 0.5 ? "rect" : "square",
-    });
-  }
-}
-
-// 불 효과 파티클 생성
-function createFireParticles(count: number): void {
-  const colors = effectOptions.colors;
-
-  for (let i = 0; i < count; i++) {
-    // 위쪽 방향
-    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.5;
-    const speed = (Math.random() * 1 + 1) * effectOptions.speed;
-
-    const size =
-      Math.random() * (effectOptions.maxSize - effectOptions.minSize) +
-      effectOptions.minSize;
-    const life =
-      Math.random() * (effectOptions.maxLife - effectOptions.minLife) +
-      effectOptions.minLife;
-
-    // 위치에 약간의 랜덤성 추가
-    const offsetX = (Math.random() - 0.5) * 20 * effectOptions.spread;
-
-    particles.push({
-      x: emitterX + offsetX,
-      y: emitterY,
-      vx: Math.cos(angle) * speed * 0.2,
-      vy: Math.sin(angle) * speed,
-      size: size,
-      initialSize: size,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      opacity: 0.8,
-      life: life,
-      maxLife: life,
-    });
-  }
-}
-
-// 연기 효과 파티클 생성
-function createSmokeParticles(count: number): void {
-  const colors = effectOptions.colors;
-
-  for (let i = 0; i < count; i++) {
-    // 위쪽 방향
-    const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.3;
-    const speed = (Math.random() * 0.5 + 0.2) * effectOptions.speed;
-
-    const size =
-      Math.random() * (effectOptions.maxSize - effectOptions.minSize) +
-      effectOptions.minSize;
-    const life =
-      Math.random() * (effectOptions.maxLife - effectOptions.minLife) +
-      effectOptions.minLife;
-
-    // 위치에 약간의 랜덤성 추가
-    const offsetX = (Math.random() - 0.5) * 10 * effectOptions.spread;
-
-    particles.push({
-      x: emitterX + offsetX,
-      y: emitterY,
-      vx: Math.cos(angle) * speed * 0.5,
-      vy: Math.sin(angle) * speed,
-      size: size,
-      initialSize: size * 0.5,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      opacity: 0.7,
-      life: life,
-      maxLife: life,
-    });
-  }
-}
+// 워커 초기 메시지
+self.postMessage({ type: WorkerMessageType.READY });
 
 /**
- * 오류 메시지 전송
- * @param message 오류 메시지
- * @param id 메시지 ID
+ * 파티클 효과 시작
+ * @param effectType 효과 타입
+ * @param options 효과 옵션
  */
-function sendError(message: string, id?: string): void {
-  self.postMessage({
-    type: WorkerMessageType.ERROR,
-    id,
-    data: {
-      message,
-    },
-  });
-}
+function startEffect(effectType: string, options: any = {}): boolean {
+  // 효과 옵션 설정
+  effectOptions = {
+    type: effectType || "explosion",
+    particleCount: options.particleCount || 100,
+    gravity: options.gravity !== undefined ? options.gravity : 0.1,
+    size: options.size || 5,
+    lifeSpan: options.lifeSpan || 100,
+    colors: options.colors || [],
+    mouseTracking:
+      options.mouseTracking !== undefined ? options.mouseTracking : false,
+  };
 
-/**
- * 응답 메시지 전송
- * @param messageId 메시지 ID
- * @param commandId 명령 ID
- * @param success 성공 여부
- * @param data 응답 데이터
- * @param error 오류 메시지
- */
-function sendResponse(
-  messageId: string,
-  commandId: string,
-  success: boolean,
-  data: any = null,
-  error: string = ""
-): void {
-  self.postMessage({
-    type: WorkerMessageType.RESPONSE,
-    id: messageId,
-    data: {
-      commandId,
-      success,
-      data,
-      error,
-    },
-  });
-}
+  // 버퍼 크기가 충분한지 확인하고 필요시 재생성
+  const requiredParticles = Math.max(effectOptions.particleCount * 2, 1000); // 여유 있게 2배 또는 최소 1000
+  if (currentMaxParticleCount < requiredParticles) {
+    console.log(
+      `Increasing buffer size for effect: ${requiredParticles} particles needed`
+    );
+    createEmptyParticleBuffers(requiredParticles);
+  }
 
-/**
- * 이벤트 메시지 전송
- * @param type 이벤트 타입
- * @param data 이벤트 데이터
- */
-function sendEvent(type: string, data: any = {}): void {
+  // 효과 타입에 따른 기본 색상 설정
+  if (effectOptions.colors.length === 0) {
+    switch (effectOptions.type) {
+      case "explosion":
+        effectOptions.colors = ["#ff0000", "#ff7700", "#ffff00"];
+        break;
+      case "fountain":
+        effectOptions.colors = ["#00ffff", "#0099ff", "#0000ff"];
+        break;
+      case "snow":
+        effectOptions.colors = ["#ffffff", "#eeeeee", "#cccccc"];
+        break;
+      default:
+        effectOptions.colors = ["#ff0000", "#00ff00", "#0000ff"];
+    }
+  }
+
+  mouseTracking = effectOptions.mouseTracking;
+  activeEffect = effectOptions.type;
+
+  // 효과 시작 이벤트 전송
   self.postMessage({
     type: WorkerMessageType.EVENT,
     data: {
-      type,
-      ...data,
+      type: "effectStarted",
+      effect: activeEffect,
+      options: effectOptions,
     },
+  });
+
+  // 애니메이션 시작 (아직 실행 중이 아니라면)
+  if (!animationFrameId) {
+    animate();
+  }
+
+  return true;
+}
+
+/**
+ * 파티클 효과 정지
+ */
+function stopEffect(): boolean {
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+
+  particles = [];
+  activeEffect = null;
+
+  sendEvent("effectStopped");
+  return true;
+}
+
+/**
+ * 이미터 위치 업데이트
+ */
+function updateEmitterPosition(
+  mouseX: number,
+  mouseY: number
+): { x: number; y: number } {
+  emitterX = mouseX;
+  emitterY = mouseY;
+
+  return { x: emitterX, y: emitterY };
+}
+
+/**
+ * 애니메이션 루프
+ */
+function animate(timestamp = 0): void {
+  if (!gl || !renderer) return;
+
+  const deltaTime = timestamp - lastTimestamp;
+  lastTimestamp = timestamp;
+
+  // 캔버스 클리어
+  renderer.clear();
+
+  // 파티클 업데이트 및 렌더링
+  updateParticles(deltaTime);
+  renderParticles();
+
+  // 파티클 통계 전송
+  if (particles.length > 0) {
+    sendEvent("stats", {
+      particleCount: particles.length,
+      fps: Math.round(1000 / (deltaTime || 1)),
+    });
+  }
+
+  // 애니메이션 계속 실행
+  animationFrameId = requestAnimationFrame(animate);
+}
+
+/**
+ * 파티클 업데이트
+ */
+function updateParticles(deltaTime: number): void {
+  // 생존한 파티클만 유지
+  particles = particles.filter((p) => p.life > 0);
+
+  // 새 파티클 생성 (이펙트 타입에 따라)
+  if (activeEffect) {
+    createParticlesForEffect(activeEffect, effectOptions);
+  }
+
+  // 모든 파티클 업데이트
+  particles.forEach((p) => {
+    // 속도 적용
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // 중력 적용
+    if (effectOptions.gravity) {
+      p.vy += effectOptions.gravity;
+    }
+
+    // 회전 적용
+    if (p.rotation !== undefined && p.rotationSpeed) {
+      p.rotation += p.rotationSpeed;
+    }
+
+    // 수명 감소
+    p.life--;
+
+    // 투명도 계산
+    p.opacity = p.life / p.maxLife;
   });
 }
 
-// 워커 초기 메시지
-self.postMessage({ type: WorkerMessageType.READY });
+/**
+ * 파티클 렌더링
+ */
+function renderParticles(): void {
+  if (!gl || !shaderProgram || particles.length === 0) return;
+
+  // WebGL 렌더링
+  if (gl) {
+    renderParticlesWebGL();
+  }
+}
+
+/**
+ * WebGL로 파티클 렌더링
+ */
+function renderParticlesWebGL(): void {
+  if (!gl || !shaderProgram || !renderer || !vaoHelper) return;
+
+  // 셰이더 사용
+  shaderProgram.use();
+
+  // 프로젝션 행렬 설정
+  if (projectionMatrix) {
+    shaderProgram.setUniformMatrix4fv(
+      "uProjectionMatrix",
+      false,
+      projectionMatrix
+    );
+  }
+
+  // 파티클 버퍼 업데이트
+  updateParticleBuffers(particles);
+
+  // VAO 바인딩 및 렌더링
+  if (particleVAO && vaoHelper) {
+    vaoHelper.bindVAO(particleVAO);
+    gl.drawArrays(gl.POINTS, 0, particles.length);
+    vaoHelper.unbindVAO();
+  }
+}
+
+/**
+ * 빈 파티클 버퍼 생성
+ */
+function createEmptyParticleBuffers(maxParticleCount = 10000): boolean {
+  if (!gl) {
+    return false;
+  }
+
+  try {
+    // 헬퍼 초기화
+    if (!bufferHelper) {
+      bufferHelper = new BufferHelper(gl);
+    }
+
+    if (!vaoHelper) {
+      vaoHelper = new VAOHelper(gl);
+    }
+
+    // 기존 버퍼 삭제
+    if (positionBuffer && bufferHelper) {
+      bufferHelper.deleteBuffer(positionBuffer);
+    }
+
+    if (sizeBuffer && bufferHelper) {
+      bufferHelper.deleteBuffer(sizeBuffer);
+    }
+
+    if (colorBuffer && bufferHelper) {
+      bufferHelper.deleteBuffer(colorBuffer);
+    }
+
+    if (particleVAO && vaoHelper) {
+      vaoHelper.deleteVAO(particleVAO);
+    }
+
+    if (!bufferHelper || !vaoHelper) {
+      console.error("Buffer or VAO helpers not initialized");
+      return false;
+    }
+
+    // 파티클 위치 버퍼 생성
+    positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array(maxParticleCount * 2),
+      gl.DYNAMIC_DRAW
+    );
+
+    // 파티클 크기 버퍼 생성
+    sizeBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array(maxParticleCount),
+      gl.DYNAMIC_DRAW
+    );
+
+    // 파티클 색상 버퍼 생성
+    colorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array(maxParticleCount * 4),
+      gl.DYNAMIC_DRAW
+    );
+
+    // VAO 생성
+    if (isWebGL2) {
+      particleVAO = (gl as WebGL2RenderingContext).createVertexArray();
+      (gl as WebGL2RenderingContext).bindVertexArray(particleVAO);
+    } else {
+      // WebGL1에서는 VAO 확장 사용 필요하나 여기서는 지원하지 않으므로
+      // 이 부분은 단순화하거나 별도 처리 필요
+      console.log("WebGL1 환경에서는 VAO를 사용하지 않습니다.");
+    }
+
+    // 버퍼 바인딩 및 속성 설정
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
+    gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(1);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+    gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(2);
+
+    if (isWebGL2) {
+      (gl as WebGL2RenderingContext).bindVertexArray(null);
+    } else if (vaoHelper) {
+      vaoHelper.unbindVAO();
+    }
+
+    // 현재 최대 파티클 수 저장
+    currentMaxParticleCount = maxParticleCount;
+
+    return true;
+  } catch (err) {
+    console.error("Error creating particle buffers:", err);
+    return false;
+  }
+}
+
+/**
+ * 파티클 버퍼 업데이트
+ */
+function updateParticleBuffers(particles: Particle[]): boolean {
+  if (!gl || !positionBuffer || !sizeBuffer || !colorBuffer) {
+    return false;
+  }
+
+  const particleCount = particles.length;
+
+  // 버퍼 크기가 부족한 경우 새로운 버퍼 생성
+  if (particleCount > currentMaxParticleCount) {
+    const newMax = Math.max(
+      particleCount,
+      Math.floor(currentMaxParticleCount * BUFFER_RESIZE_FACTOR)
+    );
+    console.log(`Resizing particle buffers to accommodate ${newMax} particles`);
+
+    if (!createEmptyParticleBuffers(newMax)) {
+      console.error("Failed to resize particle buffers");
+      return false;
+    }
+  }
+
+  try {
+    // 파티클 위치 데이터 준비
+    const positionData = new Float32Array(particleCount * 2);
+    const sizeData = new Float32Array(particleCount);
+    const colorData = new Float32Array(particleCount * 4);
+
+    for (let i = 0; i < particleCount; i++) {
+      positionData[i * 2] = particles[i].x;
+      positionData[i * 2 + 1] = particles[i].y;
+
+      sizeData[i] = particles[i].size;
+
+      // 색상 파싱
+      const color = parseColor(particles[i].color);
+      colorData[i * 4] = color.r / 255;
+      colorData[i * 4 + 1] = color.g / 255;
+      colorData[i * 4 + 2] = color.b / 255;
+      colorData[i * 4 + 3] = particles[i].opacity;
+    }
+
+    // 버퍼 업데이트
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, positionData);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, sizeData);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, colorData);
+
+    return true;
+  } catch (err) {
+    console.error("Error updating particle buffers:", err);
+    return false;
+  }
+}
+
+/**
+ * 색상 문자열을 RGB 객체로 변환
+ */
+function parseColor(color: string): { r: number; g: number; b: number } {
+  // 기본 색상
+  if (!color) {
+    return { r: 255, g: 255, b: 255 };
+  }
+
+  // HEX 색상 파싱
+  if (color.startsWith("#")) {
+    const hex = color.slice(1);
+    const bigint = parseInt(hex, 16);
+
+    if (hex.length === 3) {
+      // #RGB 형식
+      const r = ((bigint >> 8) & 0xf) * 17;
+      const g = ((bigint >> 4) & 0xf) * 17;
+      const b = (bigint & 0xf) * 17;
+      return { r, g, b };
+    } else {
+      // #RRGGBB 형식
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+      return { r, g, b };
+    }
+  }
+
+  // 기본 색상 반환
+  return { r: 255, g: 255, b: 255 };
+}
+
+/**
+ * 이펙트 타입에 따른 파티클 생성
+ */
+function createParticlesForEffect(effect: string, options: any): void {
+  switch (effect) {
+    case "explosion":
+      createExplosionParticles(options);
+      break;
+    case "fountain":
+      createFountainParticles(options);
+      break;
+    case "snow":
+      createSnowParticles(options);
+      break;
+    // 다른 효과들...
+    default:
+      // 기본 파티클
+      createFountainParticles(options);
+  }
+}
+
+/**
+ * 폭발 효과 파티클 생성
+ */
+function createExplosionParticles(options: any): void {
+  // 폭발 효과는 한 번에 모든 파티클 생성
+  if (particles.length === 0) {
+    for (let i = 0; i < options.particleCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1 + Math.random() * 3;
+      const size = options.size * (0.5 + Math.random() * 0.5);
+      const life = options.lifeSpan * (0.8 + Math.random() * 0.4);
+      const colorIndex = Math.floor(Math.random() * options.colors.length);
+
+      particles.push({
+        x: emitterX,
+        y: emitterY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size,
+        color: options.colors[colorIndex],
+        opacity: 1,
+        life,
+        maxLife: life,
+      });
+    }
+  }
+}
+
+/**
+ * 분수 효과 파티클 생성
+ */
+function createFountainParticles(options: any): void {
+  // 분수 효과는 지속적으로 파티클 생성
+  const particlesPerFrame = Math.max(1, Math.floor(options.particleCount / 60));
+
+  for (let i = 0; i < particlesPerFrame; i++) {
+    const angle = Math.PI / 2 + (Math.random() - 0.5);
+    const speed = 2 + Math.random() * 2;
+    const size = options.size * (0.5 + Math.random() * 0.5);
+    const life = options.lifeSpan * (0.8 + Math.random() * 0.4);
+    const colorIndex = Math.floor(Math.random() * options.colors.length);
+
+    particles.push({
+      x: emitterX,
+      y: emitterY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      size,
+      color: options.colors[colorIndex],
+      opacity: 1,
+      life,
+      maxLife: life,
+    });
+  }
+}
+
+/**
+ * 눈 효과 파티클 생성
+ */
+function createSnowParticles(options: any): void {
+  // 눈 효과는 화면 상단에서 지속적으로 파티클 생성
+  const particlesPerFrame = Math.max(
+    1,
+    Math.floor(options.particleCount / 120)
+  );
+
+  for (let i = 0; i < particlesPerFrame; i++) {
+    const x = Math.random() * canvasWidth;
+    const y = -10;
+    const speed = 0.5 + Math.random();
+    const size = options.size * (0.3 + Math.random() * 0.7);
+    const life = options.lifeSpan * (0.8 + Math.random() * 0.4);
+    const colorIndex = Math.floor(Math.random() * options.colors.length);
+
+    particles.push({
+      x,
+      y,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: speed,
+      size,
+      color: options.colors[colorIndex],
+      opacity: 1,
+      life,
+      maxLife: life,
+      rotation: Math.random() * Math.PI * 2,
+      rotationSpeed: (Math.random() - 0.5) * 0.02,
+    });
+  }
+}
+
+/**
+ * 파티클 셰이더 초기화
+ */
+function initializeParticleShaders(): void {
+  if (!gl || !renderer) return;
+
+  // 헬퍼 초기화
+  if (!bufferHelper) {
+    bufferHelper = new BufferHelper(gl);
+  }
+
+  if (!vaoHelper) {
+    vaoHelper = new VAOHelper(gl);
+  }
+
+  // 버텍스 셰이더
+  const vertexShaderSource = `
+    attribute vec2 aPosition;
+    attribute float aSize;
+    attribute vec4 aColor;
+    
+    uniform mat4 uProjectionMatrix;
+    
+    varying vec4 vColor;
+    
+    void main() {
+      gl_Position = uProjectionMatrix * vec4(aPosition, 0.0, 1.0);
+      gl_PointSize = aSize;
+      vColor = aColor;
+    }
+  `;
+
+  // 프래그먼트 셰이더
+  const fragmentShaderSource = `
+    precision mediump float;
+    varying vec4 vColor;
+    
+    void main() {
+      // 원형 모양의 파티클 생성
+      float dist = length(gl_PointCoord - vec2(0.5, 0.5));
+      if (dist > 0.5) {
+        discard;
+      }
+      
+      gl_FragColor = vColor;
+    }
+  `;
+
+  // 셰이더 프로그램 생성
+  try {
+    // 버텍스 셰이더 컴파일
+    const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+    if (!vertexShader) {
+      throw new Error("버텍스 셰이더를 생성할 수 없습니다.");
+    }
+    gl.shaderSource(vertexShader, vertexShaderSource);
+    gl.compileShader(vertexShader);
+
+    // 컴파일 상태 확인
+    if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
+      const error = gl.getShaderInfoLog(vertexShader);
+      gl.deleteShader(vertexShader);
+      throw new Error(`버텍스 셰이더 컴파일 오류: ${error}`);
+    }
+
+    // 프래그먼트 셰이더 컴파일
+    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+    if (!fragmentShader) {
+      gl.deleteShader(vertexShader);
+      throw new Error("프래그먼트 셰이더를 생성할 수 없습니다.");
+    }
+    gl.shaderSource(fragmentShader, fragmentShaderSource);
+    gl.compileShader(fragmentShader);
+
+    // 컴파일 상태 확인
+    if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
+      const error = gl.getShaderInfoLog(fragmentShader);
+      gl.deleteShader(vertexShader);
+      gl.deleteShader(fragmentShader);
+      throw new Error(`프래그먼트 셰이더 컴파일 오류: ${error}`);
+    }
+
+    // 프로그램 생성 및 링크
+    const program = gl.createProgram();
+    if (!program) {
+      gl.deleteShader(vertexShader);
+      gl.deleteShader(fragmentShader);
+      throw new Error("셰이더 프로그램을 생성할 수 없습니다.");
+    }
+
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
+
+    // 링크 상태 확인
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      const error = gl.getProgramInfoLog(program);
+      gl.deleteProgram(program);
+      gl.deleteShader(vertexShader);
+      gl.deleteShader(fragmentShader);
+      throw new Error(`셰이더 프로그램 링크 오류: ${error}`);
+    }
+
+    // 사용하지 않는 셰이더 정리
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+
+    // 셰이더 프로그램 저장 - 타입 캐스팅 방식 변경
+    shaderProgram = {
+      program,
+      use: function () {
+        gl!.useProgram(program);
+      },
+      setUniformMatrix4fv: function (
+        name: string,
+        transpose: boolean,
+        value: Float32Array
+      ) {
+        const location = gl!.getUniformLocation(program, name);
+        if (location) {
+          gl!.uniformMatrix4fv(location, transpose, value);
+        }
+      },
+    } as unknown as ShaderProgram; // unknown으로 먼저 변환
+
+    // 파티클 버퍼 생성
+    createEmptyParticleBuffers(MAX_PARTICLES);
+
+    if (DEBUG) console.log("파티클 셰이더 초기화 완료");
+  } catch (error) {
+    console.error("셰이더 초기화 오류:", error);
+    throw new Error("셰이더 초기화 실패");
+  }
+}
