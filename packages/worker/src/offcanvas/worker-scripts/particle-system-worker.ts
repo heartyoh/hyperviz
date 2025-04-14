@@ -581,9 +581,12 @@ function updateParticles(deltaTime: number): void {
     p.x += p.vx;
     p.y += p.vy;
 
-    // 중력 적용
-    if (effectOptions.gravity) {
-      p.vy += effectOptions.gravity;
+    // 중력 적용 (이펙트 타입에 따라 다르게 적용)
+    if (effectOptions.type !== "fire" && effectOptions.type !== "smoke") {
+      // 불과 연기는 중력의 영향을 받지 않음
+      if (effectOptions.gravity) {
+        p.vy += effectOptions.gravity;
+      }
     }
 
     // 회전 적용
@@ -591,11 +594,39 @@ function updateParticles(deltaTime: number): void {
       p.rotation += p.rotationSpeed;
     }
 
+    // 크기 변화 (연기 효과를 위해)
+    if (p.growRate) {
+      p.size += p.size * p.growRate * 0.01;
+    }
+
     // 수명 감소
     p.life--;
 
-    // 투명도 계산
-    p.opacity = p.life / p.maxLife;
+    // 특수 효과별 추가 업데이트
+    if (p.type === "fire") {
+      // 불 효과는 위로 올라갈수록 크기 감소
+      p.size *= 0.99;
+
+      // 색상을 점점 밝게 변경 (이 부분은 실제 렌더링에서 적용해야 함)
+      if (p.fadeRate) {
+        p.opacity -= p.fadeRate;
+      } else {
+        p.opacity = p.life / p.maxLife;
+      }
+    } else if (effectOptions.type === "smoke") {
+      // 연기는 위로 올라갈수록 크기 증가하고 투명해짐
+      if (p.fadeRate) {
+        p.opacity -= p.fadeRate;
+      } else {
+        p.opacity = (p.life / p.maxLife) * 0.7; // 연기는 더 투명하게
+      }
+    } else {
+      // 기본 파티클 투명도 계산
+      p.opacity = p.life / p.maxLife;
+    }
+
+    // 투명도 범위 제한
+    p.opacity = Math.max(0, Math.min(1, p.opacity));
   });
 }
 
@@ -629,14 +660,64 @@ function renderParticlesWebGL(): void {
     );
   }
 
-  // 파티클 버퍼 업데이트
-  updateParticleBuffers(particles);
+  // 파티클 타입별로 그룹화하여 최적화
+  const defaultParticles = [];
+  const confettiParticles = [];
 
-  // VAO 바인딩 및 렌더링
-  if (particleVAO && vaoHelper) {
-    vaoHelper.bindVAO(particleVAO);
-    gl.drawArrays(gl.POINTS, 0, particles.length);
-    vaoHelper.unbindVAO();
+  // 파티클 타입별로 분류
+  for (let i = 0; i < particles.length; i++) {
+    if (particles[i].shape === "rectangle") {
+      confettiParticles.push(particles[i]);
+    } else {
+      defaultParticles.push(particles[i]);
+    }
+  }
+
+  // 일반 원형 파티클 렌더링
+  if (defaultParticles.length > 0) {
+    updateParticleBuffers(defaultParticles);
+
+    if (particleVAO && vaoHelper) {
+      vaoHelper.bindVAO(particleVAO);
+      gl.drawArrays(gl.POINTS, 0, defaultParticles.length);
+      vaoHelper.unbindVAO();
+    }
+  }
+
+  // 사각형 파티클 (confetti) 렌더링 - 이 경우 개별적으로 렌더링
+  if (confettiParticles.length > 0 && renderer) {
+    // 블렌딩 활성화 - 투명도 지원
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    // 각 사각형 파티클을 개별적으로 렌더링
+    for (const particle of confettiParticles) {
+      // 이 부분에서는 간단하게 구현하기 위해 점으로 렌더링
+      // 실제로는 사각형 메시를 생성하고 회전 변환 등을 적용해야 함
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      const positionData = new Float32Array([particle.x, particle.y]);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, positionData);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
+      const sizeData = new Float32Array([particle.size * 1.5]); // 사각형은 약간 더 크게
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, sizeData);
+
+      const color = parseColor(particle.color);
+      gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+      const colorData = new Float32Array([
+        color.r / 255,
+        color.g / 255,
+        color.b / 255,
+        particle.opacity,
+      ]);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, colorData);
+
+      // 하나의 포인트 렌더링
+      gl.drawArrays(gl.POINTS, 0, 1);
+    }
+
+    // 블렌딩 비활성화
+    gl.disable(gl.BLEND);
   }
 }
 
@@ -854,7 +935,15 @@ function createParticlesForEffect(effect: string, options: any): void {
     case "snow":
       createSnowParticles(options);
       break;
-    // 다른 효과들...
+    case "confetti":
+      createConfettiParticles(options);
+      break;
+    case "fire":
+      createFireParticles(options);
+      break;
+    case "smoke":
+      createSmokeParticles(options);
+      break;
     default:
       // 기본 파티클
       createFountainParticles(options);
@@ -952,6 +1041,146 @@ function createSnowParticles(options: any): void {
 }
 
 /**
+ * 색종이 효과 파티클 생성
+ */
+function createConfettiParticles(options: any): void {
+  // 색종이는 위쪽에서 떨어지는 다채로운 사각형 파티클
+  const particlesPerFrame = Math.max(1, Math.floor(options.particleCount / 80));
+
+  for (let i = 0; i < particlesPerFrame; i++) {
+    // 화면 상단 전체에서 생성
+    const x = Math.random() * canvasWidth;
+    const y = -20;
+
+    // 불규칙한 속도와 방향
+    const vx = (Math.random() - 0.5) * 2;
+    const vy = 1 + Math.random() * 2;
+
+    // 크기는 약간 크게
+    const size = options.size * (0.8 + Math.random() * 1.2);
+
+    // 더 긴 수명
+    const life = options.lifeSpan * (1.0 + Math.random() * 0.5);
+
+    // 다양한 색상 중 랜덤 선택
+    const colors =
+      options.colors.length > 0
+        ? options.colors
+        : ["#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff"];
+    const colorIndex = Math.floor(Math.random() * colors.length);
+
+    particles.push({
+      x,
+      y,
+      vx,
+      vy,
+      size,
+      color: colors[colorIndex],
+      opacity: 1,
+      life,
+      maxLife: life,
+      rotation: Math.random() * Math.PI,
+      rotationSpeed: (Math.random() - 0.5) * 0.1, // 빠른 회전
+      shape: "rectangle", // 사각형 모양 (렌더링 시 처리 필요)
+    });
+  }
+}
+
+/**
+ * 불 효과 파티클 생성
+ */
+function createFireParticles(options: any): void {
+  // 불은 아래에서 위로 상승하는 파티클들
+  const particlesPerFrame = Math.max(1, Math.floor(options.particleCount / 30));
+
+  // 기본 색상이 설정되지 않았다면 불 색상 사용
+  const fireColors =
+    options.colors.length > 0
+      ? options.colors
+      : ["#ff0000", "#ff3300", "#ff6600", "#ff9900", "#ffcc00", "#ffff00"];
+
+  for (let i = 0; i < particlesPerFrame; i++) {
+    // 이미터 위치 주변에서 생성 (약간의 랜덤성 추가)
+    const x = emitterX + (Math.random() - 0.5) * 30;
+    const y = emitterY + 10; // 약간 아래에서 시작
+
+    // 위쪽으로 상승하는 속도, 좌우로 약간 흔들림
+    const vx = (Math.random() - 0.5) * 1.5;
+    const vy = -2 - Math.random() * 3; // 음수 값으로 위로 상승
+
+    // 크기는 불꽃 특성에 맞게 랜덤
+    const size = options.size * (0.5 + Math.random());
+
+    // 수명은 짧게
+    const life = options.lifeSpan * (0.3 + Math.random() * 0.7);
+
+    // 색상은 불꽃 색상 중 랜덤 (아래쪽은 더 붉고, 위쪽은 더 노란색)
+    const colorIndex = Math.floor(Math.random() * fireColors.length);
+
+    particles.push({
+      x,
+      y,
+      vx,
+      vy,
+      size,
+      color: fireColors[colorIndex],
+      opacity: 0.9,
+      life,
+      maxLife: life,
+      type: "fire", // 파티클 유형으로 fire 추가
+      fadeRate: 0.02 + Math.random() * 0.03, // 빠르게 사라짐
+    });
+  }
+}
+
+/**
+ * 연기 효과 파티클 생성
+ */
+function createSmokeParticles(options: any): void {
+  // 연기는 천천히 상승하며 점점 확산되는 파티클
+  const particlesPerFrame = Math.max(1, Math.floor(options.particleCount / 60));
+
+  // 연기 색상 기본값
+  const smokeColors =
+    options.colors.length > 0
+      ? options.colors
+      : ["#555555", "#666666", "#777777", "#888888", "#999999"];
+
+  for (let i = 0; i < particlesPerFrame; i++) {
+    // 이미터 위치 주변에서 생성
+    const x = emitterX + (Math.random() - 0.5) * 10;
+    const y = emitterY;
+
+    // 느리게 상승하며 좌우로 약간 흔들림
+    const vx = (Math.random() - 0.5) * 0.5;
+    const vy = -0.5 - Math.random() * 1; // 천천히 위로 상승
+
+    // 크기는 크게 시작해서 더 커짐
+    const size = options.size * (1.0 + Math.random() * 1.5);
+
+    // 수명은 길게
+    const life = options.lifeSpan * (1.0 + Math.random() * 1.0);
+
+    // 연기 색상 중 랜덤
+    const colorIndex = Math.floor(Math.random() * smokeColors.length);
+
+    particles.push({
+      x,
+      y,
+      vx,
+      vy,
+      size,
+      color: smokeColors[colorIndex],
+      opacity: 0.4 + Math.random() * 0.3, // 낮은 불투명도로 시작
+      life,
+      maxLife: life,
+      growRate: 0.2 + Math.random() * 0.3, // 시간이 지남에 따라 크기 증가
+      fadeRate: 0.01 + Math.random() * 0.01, // 천천히 사라짐
+    });
+  }
+}
+
+/**
  * 파티클 셰이더 초기화
  */
 function initializeParticleShaders(): void {
@@ -983,19 +1212,21 @@ function initializeParticleShaders(): void {
     }
   `;
 
-  // 프래그먼트 셰이더
+  // 프래그먼트 셰이더 - 다양한 파티클 모양 지원
   const fragmentShaderSource = `
     precision mediump float;
     varying vec4 vColor;
     
     void main() {
-      // 원형 모양의 파티클 생성
+      // 기본 원형 파티클
       float dist = length(gl_PointCoord - vec2(0.5, 0.5));
       if (dist > 0.5) {
         discard;
       }
       
-      gl_FragColor = vColor;
+      // 부드러운 가장자리 효과
+      float alpha = smoothstep(0.5, 0.4, dist);
+      gl_FragColor = vec4(vColor.rgb, vColor.a * alpha);
     }
   `;
 
