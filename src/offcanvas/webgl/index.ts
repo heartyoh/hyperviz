@@ -1,1 +1,0 @@
-export type { BufferParams, VAOParams } from './types'; 
