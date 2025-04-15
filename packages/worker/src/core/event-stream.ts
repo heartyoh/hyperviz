@@ -1,85 +1,85 @@
 /**
- * EventStream 클래스
- * 워커와 메인 스레드 간 지속적인 통신을 위한 스트림 구현
+ * EventStream class
+ * Provides bidirectional communication stream between worker and main thread
  */
 
 import { EventEmitter } from "eventemitter3";
 import {
-  StreamOptions,
+  StreamEventType,
+  StreamEventMessage,
+  StreamEventHandler,
   StreamStatus,
-  StreamMessageType,
-  StreamEvents,
-  StreamMessage,
-} from "../types/stream.js";
+  StreamOptions as EventStreamOptions
+} from "../types/events.js";
 import { WorkerType, TaskPriority } from "../types/index.js";
 import { generateId } from "./utils.js";
 import { logger } from "../utils/logger.js";
 
 /**
- * EventStream 클래스
- * 워커와의 양방향 통신 스트림을 제공
+ * EventStream class for managing event streams
+ * @template T - Type of events in the stream
  */
-export class EventStream<T = any> extends EventEmitter {
-  /** 스트림 ID */
+export class EventStream<T> extends EventEmitter {
+  /** Stream ID */
   private id: string;
 
-  /** 스트림 상태 */
+  /** Stream status */
   private status: StreamStatus = StreamStatus.INITIALIZING;
 
-  /** 워커 ID */
+  /** Worker ID */
   private workerId?: string;
 
-  /** 스트림 옵션 */
-  private options: Required<StreamOptions>;
+  /** Stream options */
+  private options: Required<EventStreamOptions>;
 
-  /** 마지막 활동 시간 */
+  /** Last activity time */
   private lastActivityTime: number = Date.now();
 
-  /** 타임아웃 타이머 */
+  /** Timeout timer */
   private timeoutTimer?: NodeJS.Timeout;
 
   /**
-   * EventStream 생성자
-   * @param sendMessage 메시지 전송 콜백
-   * @param options 스트림 옵션
+   * EventStream constructor
+   * @param sendMessage Message sending callback
+   * @param options Stream options
    */
   constructor(
-    private sendMessage: (message: StreamMessage<T>) => Promise<void>,
-    options: StreamOptions = {}
+    private sendMessage: (message: StreamEventMessage<T>) => Promise<void>,
+    options: EventStreamOptions = {}
   ) {
     super();
 
-    // 스트림 ID 생성
+    // Generate stream ID
     this.id = generateId();
 
-    // 기본 옵션 설정
+    // Set default options
     this.options = {
       workerType: WorkerType.CALC,
       priority: TaskPriority.NORMAL,
       initialData: undefined,
-      timeout: 0, // 0은 타임아웃 없음
+      timeout: 0, // 0 means no timeout
       autoCleanup: true,
       metadata: {},
       ...options,
     };
 
-    // 타임아웃 설정
+    // Setup timeout if specified
     if (this.options.timeout > 0) {
       this.setupTimeoutTimer();
     }
 
-    // 스트림 초기화
+    // Initialize stream
     this.initialize();
   }
 
   /**
-   * 스트림 초기화
+   * Initialize stream
    */
   private async initialize(): Promise<void> {
     try {
-      // 초기화 메시지 전송
+      // Send initialization message
       await this.sendMessage({
-        type: StreamMessageType.INIT,
+        type: StreamEventType.INIT,
         streamId: this.id,
         data: this.options.initialData,
         timestamp: Date.now(),
@@ -94,25 +94,25 @@ export class EventStream<T = any> extends EventEmitter {
   }
 
   /**
-   * 스트림 ID 가져오기
+   * Get stream ID
    */
   public getId(): string {
     return this.id;
   }
 
   /**
-   * 스트림 상태 가져오기
+   * Get stream status
    */
   public getStatus(): StreamStatus {
     return this.status;
   }
 
   /**
-   * 메시지 전송
-   * @param data 전송할 데이터
+   * Send message
+   * @param data Data to send
    */
   public async send(data: T): Promise<void> {
-    // 스트림 상태 확인
+    // Check stream status
     if (
       this.status !== StreamStatus.ACTIVE &&
       this.status !== StreamStatus.INITIALIZING
@@ -121,15 +121,15 @@ export class EventStream<T = any> extends EventEmitter {
     }
 
     try {
-      // 메시지 전송
+      // Send message
       await this.sendMessage({
-        type: StreamMessageType.MESSAGE,
+        type: StreamEventType.MESSAGE,
         streamId: this.id,
         data,
         timestamp: Date.now(),
       });
 
-      // 마지막 활동 시간 업데이트
+      // Update last activity time
       this.updateActivity();
     } catch (error) {
       logger.error(`Error sending message to stream ${this.id}:`, error);
@@ -138,41 +138,41 @@ export class EventStream<T = any> extends EventEmitter {
   }
 
   /**
-   * 메시지 수신 처리
-   * @param message 수신된 메시지
+   * Handle received message
+   * @param message Received message
    */
-  public handleMessage(message: StreamMessage): void {
-    // 활동 시간 업데이트
+  public handleMessage(message: StreamEventMessage): void {
+    // Update last activity time
     this.updateActivity();
 
-    // 메시지 타입에 따른 처리
+    // Process message based on type
     switch (message.type) {
-      case StreamMessageType.READY:
+      case StreamEventType.READY:
         this.status = StreamStatus.ACTIVE;
         this.emit("ready");
         break;
 
-      case StreamMessageType.MESSAGE:
+      case StreamEventType.MESSAGE:
         if (this.status === StreamStatus.ACTIVE) {
           this.emit("message", message.data);
         }
         break;
 
-      case StreamMessageType.PAUSE:
+      case StreamEventType.PAUSE:
         this.status = StreamStatus.PAUSED;
         this.emit("pause");
         break;
 
-      case StreamMessageType.RESUME:
+      case StreamEventType.RESUME:
         this.status = StreamStatus.ACTIVE;
         this.emit("resume");
         break;
 
-      case StreamMessageType.ERROR:
+      case StreamEventType.ERROR:
         this.emit("error", new Error(message.error || "Unknown stream error"));
         break;
 
-      case StreamMessageType.CLOSE:
+      case StreamEventType.CLOSE:
         this.close();
         break;
 
@@ -182,14 +182,14 @@ export class EventStream<T = any> extends EventEmitter {
   }
 
   /**
-   * 스트림 일시 중지
+   * Pause stream
    */
   public async pause(): Promise<void> {
     if (this.status !== StreamStatus.ACTIVE) return;
 
     try {
       await this.sendMessage({
-        type: StreamMessageType.PAUSE,
+        type: StreamEventType.PAUSE,
         streamId: this.id,
         timestamp: Date.now(),
       });
@@ -202,14 +202,14 @@ export class EventStream<T = any> extends EventEmitter {
   }
 
   /**
-   * 스트림 재개
+   * Resume stream
    */
   public async resume(): Promise<void> {
     if (this.status !== StreamStatus.PAUSED) return;
 
     try {
       await this.sendMessage({
-        type: StreamMessageType.RESUME,
+        type: StreamEventType.RESUME,
         streamId: this.id,
         timestamp: Date.now(),
       });
@@ -222,81 +222,74 @@ export class EventStream<T = any> extends EventEmitter {
   }
 
   /**
-   * 스트림 종료
+   * Close stream
    */
   public async close(): Promise<void> {
     if (this.status === StreamStatus.CLOSED) return;
 
     try {
-      // 종료 메시지 전송
+      // Send close message if not in error state
       if (this.status !== StreamStatus.ERROR) {
         await this.sendMessage({
-          type: StreamMessageType.CLOSE,
+          type: StreamEventType.CLOSE,
           streamId: this.id,
           timestamp: Date.now(),
         });
       }
 
-      // 상태 업데이트
+      // Update status
       this.status = StreamStatus.CLOSED;
 
-      // 타임아웃 타이머 정리
+      // Clear timeout timer
       this.clearTimeoutTimer();
 
-      // 이벤트 발행 및 리스너 정리
+      // Emit close event and cleanup
       this.emit("close");
 
       if (this.options.autoCleanup) {
         this.removeAllListeners();
       }
-
-      logger.debug(`Stream ${this.id} closed`);
     } catch (error) {
       logger.error(`Error closing stream ${this.id}:`, error);
     }
   }
 
   /**
-   * 워커 ID 설정
-   * @param workerId 워커 ID
+   * Set event handlers
+   * @param handlers Event handlers
    */
-  public setWorkerId(workerId: string): void {
-    this.workerId = workerId;
+  public setEventHandlers(handlers: StreamEventHandler<T>): void {
+    if (handlers.onReady) this.on("ready", handlers.onReady);
+    if (handlers.onMessage) this.on("message", handlers.onMessage);
+    if (handlers.onError) this.on("error", handlers.onError);
+    if (handlers.onClose) this.on("close", handlers.onClose);
+    if (handlers.onPause) this.on("pause", handlers.onPause);
+    if (handlers.onResume) this.on("resume", handlers.onResume);
   }
 
   /**
-   * 활동 시간 업데이트
+   * Update last activity time
    */
   private updateActivity(): void {
     this.lastActivityTime = Date.now();
-
-    // 타임아웃 타이머 재설정
-    if (this.options.timeout > 0) {
-      this.clearTimeoutTimer();
+    if (this.timeoutTimer) {
       this.setupTimeoutTimer();
     }
   }
 
   /**
-   * 타임아웃 타이머 설정
+   * Setup timeout timer
    */
   private setupTimeoutTimer(): void {
-    if (this.options.timeout <= 0) return;
-
+    this.clearTimeoutTimer();
     this.timeoutTimer = setTimeout(() => {
-      const inactiveTime = Date.now() - this.lastActivityTime;
-
-      if (inactiveTime >= this.options.timeout) {
-        logger.warn(
-          `Stream ${this.id} timed out after ${inactiveTime}ms of inactivity`
-        );
-        this.close();
-      }
+      this.emit("error", new Error("Stream timeout"));
+      this.close();
     }, this.options.timeout);
   }
 
   /**
-   * 타임아웃 타이머 정리
+   * Clear timeout timer
    */
   private clearTimeoutTimer(): void {
     if (this.timeoutTimer) {

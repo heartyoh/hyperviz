@@ -103,9 +103,20 @@ function handleClose(message: StreamMessage): void {
     return;
   }
 
-  // 스트림 제거
-  activeStreams.delete(message.streamId);
-  console.log(`스트림 ${message.streamId} 종료됨`);
+  try {
+    // 스트림 제거
+    activeStreams.delete(message.streamId);
+    console.log(`스트림 ${message.streamId} 종료됨`);
+
+    // 모든 스트림이 종료되었는지 확인
+    if (activeStreams.size === 0) {
+      console.log("모든 스트림이 종료되었습니다");
+    }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`스트림 ${message.streamId} 종료 중 오류 발생:`, error);
+    sendError(message.streamId, `스트림 종료 중 오류 발생: ${errorMessage}`);
+  }
 }
 
 /**
@@ -195,30 +206,52 @@ function sendError(streamId: string, errorMessage: string): void {
 }
 
 // 메시지 리스너 등록
-self.addEventListener("message", (event: MessageEvent) => {
-  const message = event.data as StreamMessage;
+self.addEventListener("message", (event: MessageEvent<StreamMessage>) => {
+  const message = event.data;
 
-  if (!message || !message.type) {
-    console.error("유효하지 않은 메시지 형식입니다");
-    return;
+  try {
+    if (!message || !message.type) {
+      console.error("유효하지 않은 메시지 형식입니다");
+      return;
+    }
+
+    // 메시지 타입에 따른 처리
+    switch (message.type) {
+      case MESSAGE_TYPES.INIT:
+        handleInit(message);
+        break;
+
+      case MESSAGE_TYPES.MESSAGE:
+        handleMessage(message);
+        break;
+
+      case MESSAGE_TYPES.CLOSE:
+        handleClose(message);
+        break;
+
+      default:
+        console.warn(`지원하지 않는 메시지 타입: ${message.type}`);
+    }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("메시지 처리 중 오류 발생:", error);
+    if (message) {
+      sendError(message.streamId, `메시지 처리 중 오류 발생: ${errorMessage}`);
+    }
   }
+});
 
-  // 메시지 타입에 따른 처리
-  switch (message.type) {
-    case MESSAGE_TYPES.INIT:
-      handleInit(message);
-      break;
-
-    case MESSAGE_TYPES.MESSAGE:
-      handleMessage(message);
-      break;
-
-    case MESSAGE_TYPES.CLOSE:
-      handleClose(message);
-      break;
-
-    default:
-      console.warn(`지원하지 않는 메시지 타입: ${message.type}`);
+// 워커 종료 시 정리
+self.addEventListener("unload", () => {
+  try {
+    // 남아있는 스트림 정리
+    for (const streamId of activeStreams) {
+      console.log(`워커 종료 전 스트림 ${streamId} 정리`);
+      activeStreams.delete(streamId);
+    }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("워커 종료 중 오류 발생:", errorMessage);
   }
 });
 

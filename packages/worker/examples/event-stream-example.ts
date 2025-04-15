@@ -10,6 +10,7 @@ interface EventStream {
   once(event: string, listener: (data: any) => void): void;
   send(data: any): Promise<void>;
   close(): Promise<void>;
+  off(event: string, listener: (data: any) => void): void;
 }
 
 // 메시지 타입 정의
@@ -68,17 +69,23 @@ async function runStreamExample(): Promise<void> {
   }) as unknown as EventStream;
 
   // 이벤트 리스너 설정
-  counterStream.on("ready", () => {
+  const readyHandler = () => {
     console.log("스트림 준비 완료");
-  });
+  };
 
-  counterStream.on("message", (data: ResponseData) => {
+  const messageHandler = (data: ResponseData) => {
     console.log(`카운터 값: ${data.counter} (명령: ${data.lastCommand})`);
-  });
+  };
 
-  counterStream.on("error", (error: Error) => {
+  const errorHandler = (error: Error) => {
     console.error("스트림 오류:", error);
-  });
+    // 오류 발생 시 스트림 종료
+    counterStream.close().catch(console.error);
+  };
+
+  counterStream.on("ready", readyHandler);
+  counterStream.on("message", messageHandler);
+  counterStream.on("error", errorHandler);
 
   // 스트림 준비 대기
   await new Promise<void>((resolve) => {
@@ -110,15 +117,31 @@ async function runStreamExample(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 500));
 
   // 스트림 종료
-  await counterStream.close();
-  console.log("스트림 종료됨");
+  try {
+    // 이벤트 리스너 제거
+    counterStream.off("ready", readyHandler);
+    counterStream.off("message", messageHandler);
+    counterStream.off("error", errorHandler);
+
+    await counterStream.close();
+    console.log("스트림 종료됨");
+  } catch (error) {
+    console.error("스트림 종료 중 오류 발생:", error);
+    throw error;
+  }
 
   // 워커 풀 종료
-  await workerPool.shutdown();
-  console.log("워커 풀 종료됨");
+  try {
+    await workerPool.shutdown();
+    console.log("워커 풀 종료됨");
+  } catch (error) {
+    console.error("워커 풀 종료 중 오류 발생:", error);
+    throw error;
+  }
 }
 
 // 예제 실행
 runStreamExample().catch((error: Error) => {
   console.error("예제 실행 중 오류 발생:", error);
+  process.exit(1);
 });

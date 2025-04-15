@@ -56,8 +56,8 @@ export class ImageCache {
   private cache = new Map<string, CacheItem>();
   /** Cache statistics */
   private stats = {
-    hits: 0,
-    misses: 0,
+    memoryHits: 0,
+    memoryMisses: 0,
     evictions: 0,
     dbHits: 0,
     dbMisses: 0,
@@ -418,12 +418,12 @@ export class ImageCache {
         // Expiry check
         if (now - item.timestamp > this.expiryTime) {
           this.cache.delete(key);
-          this.stats.misses++;
+          this.stats.memoryMisses++;
           this.logDebug(`Memory cache expired: ${key}`);
         } else {
           // Memory cache hit: Update last accessed time
           item.lastAccessed = now;
-          this.stats.hits++;
+          this.stats.memoryHits++;
           this.logDebug(`Memory cache hit: ${key}`);
 
           // Return cloned result (original preserved)
@@ -433,7 +433,7 @@ export class ImageCache {
           return result;
         }
       } else {
-        this.stats.misses++;
+        this.stats.memoryMisses++;
         this.logDebug(`Memory cache miss: ${key}`);
       }
     }
@@ -449,8 +449,10 @@ export class ImageCache {
       if (item) {
         // Expiry check
         if (now - item.timestamp > this.expiryTime) {
+          this.stats.dbMisses++;
           this.logDebug(`IndexedDB cache expired: ${key}`);
         } else {
+          this.stats.dbHits++;
           // If hybrid mode, also save to memory cache
           if (this.storageType === CacheStorageType.HYBRID) {
             item.lastAccessed = now;
@@ -468,6 +470,9 @@ export class ImageCache {
           result.fromCache = true;
           return result;
         }
+      } else {
+        this.stats.dbMisses++;
+        this.logDebug(`IndexedDB cache miss: ${key}`);
       }
     }
 
@@ -565,13 +570,13 @@ export class ImageCache {
   } {
     return {
       size: this.cache.size,
-      memoryHits: this.stats.hits,
-      memoryMisses: this.stats.misses,
+      memoryHits: this.stats.memoryHits,
+      memoryMisses: this.stats.memoryMisses,
       dbHits: this.stats.dbHits,
       dbMisses: this.stats.dbMisses,
       evictions: this.stats.evictions,
-      totalHits: this.stats.hits + this.stats.dbHits,
-      totalMisses: this.stats.misses + this.stats.dbMisses,
+      totalHits: this.stats.memoryHits + this.stats.dbHits,
+      totalMisses: this.stats.memoryMisses + this.stats.dbMisses,
     };
   }
 

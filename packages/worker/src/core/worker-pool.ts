@@ -19,6 +19,7 @@ import { generateId } from "./utils.js";
 import { StreamManager } from "./stream-manager.js";
 import { EventStream } from "./event-stream.js";
 import { StreamOptions } from "../types/stream.js";
+import { WorkerAdapter } from "./worker-adapter.js";
 
 /**
  * WorkerPool 설정 인터페이스
@@ -186,7 +187,7 @@ export class WorkerPool extends EventEmitter {
     this.startStatsUpdates();
 
     // 스트림 매니저 초기화
-    this.streamManager = new StreamManager(this.sendMessageToWorker.bind(this));
+    this.streamManager = new StreamManager();
 
     if (this.config.enableLogging) {
       logger.info(
@@ -923,11 +924,11 @@ export class WorkerPool extends EventEmitter {
   public createEventStream<T = any>(
     options: StreamOptions = {}
   ): EventStream<T> {
-    if (this.isShutdown) {
-      throw new Error("Worker pool has been shut down");
+    const worker = this.workerManager.getIdleWorker();
+    if (!worker) {
+      throw new Error("No available workers to create event stream");
     }
-
-    return this.streamManager.createStream<T>(options);
+    return this.streamManager.createStream<T>(worker as WorkerAdapter, options);
   }
 
   /**
@@ -955,18 +956,15 @@ export class WorkerPool extends EventEmitter {
       // 실행 중인 모든 타이머 중지
       this._clearAllTimeouts();
 
-      // 모든 참조 정리
-      this._clearReferences();
-
       // 모든 스트림 닫기
-      this.streamManager.closeAllStreams();
+      await this.streamManager.closeAllStreams();
 
       if (!force) {
         // 대기 중인 태스크 취소
         for (const [workerType, queue] of this.taskQueues.entries()) {
           const tasks = queue.getAll();
           for (const task of tasks) {
-            this.handleTaskCancellation(task.id);
+            await this.handleTaskCancellation(task.id);
           }
         }
       }
@@ -996,7 +994,7 @@ export class WorkerPool extends EventEmitter {
       this.taskDurations.length = 0;
 
       if (this.config.enableLogging) {
-        logger.info("WorkerPool shut down");
+        logger.info("WorkerPool shut down successfully");
       }
 
       // 종료 이벤트 발행
@@ -1008,24 +1006,9 @@ export class WorkerPool extends EventEmitter {
   }
 
   /**
-   * 모든 타임아웃을 정리하는 내부 메서드
-   * (내부적으로 설정한 타임아웃을 추적하고 정리)
+   * 모든 타이머를 정리하는 내부 메서드
    */
   private _clearAllTimeouts(): void {
     // 추가적인 타이머가 있다면 여기서 정리
-  }
-
-  /**
-   * 참조를 정리하는 내부 메서드
-   */
-  private _clearReferences(): void {
-    // 주요 객체 참조 정리
-  }
-
-  /**
-   * 활성 스트림 수 가져오기
-   */
-  public getActiveStreamCount(): number {
-    return this.streamManager.getActiveStreamCount();
   }
 }

@@ -466,6 +466,14 @@ export class WorkerAdapter extends EventEmitter implements IWorker {
   on(event: string | symbol, listener: (...args: any[]) => void): this {
     return super.on(event, listener);
   }
+
+  getId(): string {
+    return this.id;
+  }
+
+  onMessage(callback: (message: any) => void): void {
+    this.on("message", callback);
+  }
 }
 
 /**

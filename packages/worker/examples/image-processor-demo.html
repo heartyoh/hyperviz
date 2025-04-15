@@ -682,7 +682,10 @@
 
       // 캐시 통계 업데이트
       function updateStats() {
-        if (!imageProcessor) return;
+        if (!imageProcessor) {
+          statsContent.innerHTML = "<p>이미지 프로세서가 초기화되지 않았습니다.</p>";
+          return;
+        }
 
         const stats = imageProcessor.getCacheStats();
         if (!stats) {
@@ -690,77 +693,61 @@
           return;
         }
 
-        statsContent.innerHTML = `
-        <p>메모리 캐시 항목: ${stats.size}</p>
-        <p>캐시 히트율: ${Math.round(
+        const hitRate = Math.round(
           (stats.totalHits / (stats.totalHits + stats.totalMisses || 1)) * 100
-        )}%</p>
-      `;
+        );
+
+        statsContent.innerHTML = `
+          <p>메모리 캐시 항목: ${stats.size}</p>
+          <p>캐시 히트율: ${hitRate}%</p>
+          <p>총 요청: ${stats.totalHits + stats.totalMisses}</p>
+        `;
 
         // 상세 통계 모달
         modalStatsContent.innerHTML = `
-        <table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">
-          <tr>
-            <th style="text-align:left; padding: 8px; border-bottom: 1px solid #ddd;">항목</th>
-            <th style="text-align:right; padding: 8px; border-bottom: 1px solid #ddd;">값</th>
-          </tr>
-          <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;">메모리 캐시 항목</td>
-            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
-              stats.size
-            }</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;">메모리 캐시 히트</td>
-            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
-              stats.memoryHits
-            }</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;">메모리 캐시 미스</td>
-            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
-              stats.memoryMisses
-            }</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;">IndexedDB 캐시 히트</td>
-            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
-              stats.dbHits
-            }</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;">IndexedDB 캐시 미스</td>
-            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
-              stats.dbMisses
-            }</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;">캐시 제거 횟수</td>
-            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
-              stats.evictions
-            }</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;">총 히트</td>
-            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
-              stats.totalHits
-            }</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;">총 미스</td>
-            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${
-              stats.totalMisses
-            }</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>히트율</strong></td>
-            <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;"><strong>${Math.round(
-              (stats.totalHits / (stats.totalHits + stats.totalMisses || 1)) *
-                100
-            )}%</strong></td>
-          </tr>
-        </table>
-      `;
+          <table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">
+            <tr>
+              <th style="text-align:left; padding: 8px; border-bottom: 1px solid #ddd;">항목</th>
+              <th style="text-align:right; padding: 8px; border-bottom: 1px solid #ddd;">값</th>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">메모리 캐시 항목</td>
+              <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${stats.size}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">메모리 캐시 히트</td>
+              <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${stats.memoryHits}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">메모리 캐시 미스</td>
+              <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${stats.memoryMisses}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">IndexedDB 캐시 히트</td>
+              <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${stats.dbHits}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">IndexedDB 캐시 미스</td>
+              <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${stats.dbMisses}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">캐시 제거 횟수</td>
+              <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${stats.evictions}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">총 히트</td>
+              <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${stats.totalHits}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;">총 미스</td>
+              <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;">${stats.totalMisses}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; border-bottom: 1px solid #eee;"><strong>히트율</strong></td>
+              <td style="text-align:right; padding: 8px; border-bottom: 1px solid #eee;"><strong>${hitRate}%</strong></td>
+            </tr>
+          </table>
+        `;
       }
 
       // 로그 함수

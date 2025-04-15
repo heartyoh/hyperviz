@@ -214,7 +214,7 @@
       });
 
       // Worker 메시지 이벤트
-      worker.addEventListener("message", (event) => {
+      const messageHandler = (event) => {
         const message = event.data;
 
         // 스트림 메시지 처리
@@ -237,28 +237,54 @@
             counterElement.textContent = counter;
 
             log(`카운터 업데이트: ${counter} (액션: ${action})`);
+          } else if (message.type === "STREAM_ERROR") {
+            // 오류 처리
+            const { error } = message.data;
+            log(`스트림 오류: ${error}`);
+            handleError();
           }
         }
-      });
+      };
 
-      // 오류 처리
-      worker.addEventListener("error", (error) => {
+      // 오류 처리 함수
+      const handleError = () => {
+        isConnected = false;
+        connectButton.disabled = false;
+        disconnectButton.disabled = true;
+        incrementButton.disabled = true;
+        decrementButton.disabled = true;
+        resetButton.disabled = true;
+        statusElement.textContent = "연결 상태: 오류 발생";
+      };
+
+      // 워커 오류 처리
+      const errorHandler = (error) => {
         log(`워커 오류: ${error.message}`);
         console.error("워커 오류:", error);
-      });
+        handleError();
+      };
+
+      // 이벤트 리스너 등록
+      worker.addEventListener("message", messageHandler);
+      worker.addEventListener("error", errorHandler);
 
       // 페이지 종료 시 정리
       window.addEventListener("beforeunload", () => {
         if (isConnected && streamId) {
+          // 종료 메시지 전송
           worker.postMessage({
             type: "STREAM_CLOSE",
             streamId,
             timestamp: Date.now(),
           });
-        }
 
-        // Worker 종료
-        worker.terminate();
+          // 이벤트 리스너 제거
+          worker.removeEventListener("message", messageHandler);
+          worker.removeEventListener("error", errorHandler);
+
+          // 워커 종료
+          worker.terminate();
+        }
       });
     </script>
   </body>
