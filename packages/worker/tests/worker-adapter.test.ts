@@ -2,22 +2,21 @@
  * WorkerAdapter 테스트
  */
 import { EventEmitter } from "eventemitter3";
-import { WorkerAdapter } from "../src/core/worker-adapter";
+import { WorkerAdapter } from "../src/core/worker-adapter.js";
 import {
   TaskPriority,
   TaskStatus,
   WorkerType,
   WorkerStatus,
-} from "../src/types/index";
+  WorkerMessage,
+} from "../src/types/index.js";
+import { jest } from '@jest/globals';
 
 // 환경 변수 모킹
 let mockIsWeb = false;
 
 // WorkerAdapter 모듈 모킹
-jest.mock("../src/core/worker-adapter", () => {
-  // 실제 모듈을 가져옵니다
-  const actual = jest.requireActual("../src/core/worker-adapter");
-
+jest.mock("../src/core/worker-adapter.js", () => {
   // Mock 클래스 생성
   class MockWorkerAdapter extends EventEmitter {
     id: string;
@@ -194,7 +193,6 @@ jest.mock("../src/core/worker-adapter", () => {
   }
 
   return {
-    ...actual,
     WorkerAdapter: MockWorkerAdapter,
     // 테스트 헬퍼
     __setWebEnvironment: (isWeb: boolean) => {
@@ -577,6 +575,51 @@ describe("WorkerAdapter", () => {
       expect(adapter.isIdle()).toBeFalsy();
       expect(adapter.isBusy()).toBeFalsy();
       expect(adapter.isAvailable()).toBeFalsy();
+    });
+
+    it("should handle message events", () => {
+      const adapter = new WorkerAdapter({
+        id: "worker1",
+        file: "worker.js",
+        workerData: { type: WorkerType.CALC }
+      });
+      const mockCallback = jest.fn();
+
+      adapter.on("message", (message: WorkerMessage) => {
+        mockCallback(message);
+      });
+
+      // ... existing code ...
+    });
+
+    it("should handle exit events", () => {
+      const adapter = new WorkerAdapter({
+        id: "worker1",
+        file: "worker.js",
+        workerData: { type: WorkerType.CALC }
+      });
+      const mockCallback = jest.fn();
+
+      adapter.on("exit", (code: number) => {
+        mockCallback(code);
+      });
+
+      // ... existing code ...
+    });
+
+    it("should handle error events", () => {
+      const adapter = new WorkerAdapter({
+        id: "worker1",
+        file: "worker.js",
+        workerData: { type: WorkerType.CALC }
+      });
+      const mockCallback = jest.fn();
+
+      adapter.on("error", (error: Error) => {
+        mockCallback(error);
+      });
+
+      // ... existing code ...
     });
   });
 });

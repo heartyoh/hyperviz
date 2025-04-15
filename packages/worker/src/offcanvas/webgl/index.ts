@@ -2,16 +2,12 @@
  * WebGL 모듈
  * WebGL 렌더링을 위한 유틸리티 및 도우미 클래스 내보내기
  */
-export * from "./shader.js";
-export * from "./geometry.js";
-export * from "./texture.js";
-export * from "./renderer.js";
-export {
-  WebGLBufferType,
-  WebGLBufferUsage,
-  BufferParams,
-  VAOParams,
-} from "../types.js";
+export type { BufferParams, VAOParams } from './types.js';
+export { BufferHelper, VAOHelper } from './geometry.js';
+export { ShaderProgram } from './shader.js';
+export { TextureHelper } from './texture.js';
+export { Renderer, PrimitiveType } from './renderer.js';
+export { WebGLBufferType, WebGLBufferUsage } from '../types.js';
 
 /**
  * WebGL 컨텍스트 속성 옵션

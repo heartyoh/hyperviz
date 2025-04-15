@@ -8,12 +8,12 @@ import {
   StreamEventType,
   StreamEventMessage,
   StreamEventHandler,
-  StreamStatus,
   StreamOptions as EventStreamOptions
 } from "../types/events.js";
 import { WorkerType, TaskPriority } from "../types/index.js";
 import { generateId } from "./utils.js";
 import { logger } from "../utils/logger.js";
+import { StreamStatus, StreamMessageType, type StreamMessage, type StreamEvents } from "../types/stream.js";
 
 /**
  * EventStream class for managing event streams

@@ -1,9 +1,10 @@
 /**
  * WorkerManager 테스트
  */
+import { jest } from '@jest/globals';
 import { EventEmitter } from "eventemitter3";
-import { WorkerManager } from "../src/core/worker-manager";
-import { WorkerStatus, WorkerType } from "../src/types/index";
+import { WorkerManager } from "../src/core/worker-manager.js";
+import { WorkerStatus, WorkerType } from "../src/types/index.js";
 
 // WorkerAdapter 모킹
 jest.mock("../src/core/worker-adapter", () => {
@@ -54,6 +55,7 @@ describe("WorkerManager", () => {
       maxWorkers: 3,
       idleTimeout: 1000,
       workerType: WorkerType.CALC,
+      workerFile: "test-worker.js"
     });
   });
 
@@ -364,6 +366,21 @@ describe("WorkerManager", () => {
 
       // 타이머 모킹 해제
       jest.useRealTimers();
+    });
+
+    it("should get worker ids", () => {
+      const manager = new WorkerManager({
+        minWorkers: 2,
+        maxWorkers: 4,
+        idleTimeout: 30000,
+        workerType: WorkerType.CALC,
+        workerFile: "test-worker.js"
+      });
+      const workers = manager.getAllWorkers();
+
+      expect(workers.map((w: { id: string }) => w.id).sort()).toEqual(
+        ["worker1", "worker2"].sort()
+      );
     });
   });
 });

@@ -1,23 +1,30 @@
 /** @type {import('jest').Config} */
 const config = {
-  preset: "ts-jest",
-  testEnvironment: "node",
+  preset: "ts-jest/presets/default-esm",
+  testEnvironment: "jsdom",
+  extensionsToTreatAsEsm: [".ts"],
+  moduleNameMapper: {
+    "^(\\.{1,2}/.*)\\.js$": "$1"
+  },
   transform: {
     "^.+\\.tsx?$": [
       "ts-jest",
       {
-        tsconfig: "tsconfig.json",
-        isolatedModules: true,
-      },
-    ],
+        useESM: true,
+        tsconfig: "tsconfig.json"
+      }
+    ]
   },
-  moduleNameMapper: {
-    "^(\\.{1,2}/.*)\\.js$": "$1",
-  },
-  testMatch: ["**/tests/**/*.test.ts"],
-  collectCoverage: true,
-  collectCoverageFrom: ["src/**/*.ts"],
-  coverageDirectory: "coverage",
+  transformIgnorePatterns: [
+    "node_modules/(?!(eventemitter3)/)"
+  ],
+  collectCoverageFrom: [
+    "src/**/*.ts"
+  ],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  testMatch: ['**/tests/**/*.test.ts'],
+  verbose: true,
+  resolver: "ts-jest-resolver"
 };
 
 export default config;

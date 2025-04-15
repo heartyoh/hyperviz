@@ -133,11 +133,18 @@ export class EventHub extends EventEmitter implements IEventHub {
    * @param data 이벤트 데이터
    */
   emitTaskEvent(type: TaskEventType, data: any): void {
+    // Add timestamp and eventType to event data
+    const eventData = {
+      ...data,
+      eventType: type,
+      timestamp: Date.now()
+    };
+
     // 태스크 이벤트 발행
-    this.emit(type, data);
+    this.emit(type, eventData);
 
     // 메타 이벤트 발행
-    this.emit("taskEvent", { type, data });
+    this.emit("taskEvent", { type, data: eventData });
   }
 
   /**
@@ -146,11 +153,18 @@ export class EventHub extends EventEmitter implements IEventHub {
    * @param data 이벤트 데이터
    */
   emitWorkerEvent(type: WorkerEventType, data: any): void {
+    // Add timestamp and eventType to event data
+    const eventData = {
+      ...data,
+      eventType: type,
+      timestamp: Date.now()
+    };
+
     // 워커 이벤트 발행
-    this.emit(type, data);
+    this.emit(type, eventData);
 
     // 메타 이벤트 발행
-    this.emit("workerEvent", { type, data });
+    this.emit("workerEvent", { type, data: eventData });
   }
 
   /**

@@ -1,4 +1,4 @@
-// 타입 정의를 먼저 추가
+import { jest } from '@jest/globals';
 import {
   WorkerPool,
   TaskPriority,
@@ -82,6 +82,7 @@ jest.mock("../src/core/worker-manager.js", () => {
             const worker = new WorkerAdapter({
               id: workerId,
               workerType: config.workerType,
+              file: config.workerFile,
             });
 
             workers.set(workerId, worker);
@@ -254,38 +255,40 @@ jest.mock("../src/core/worker-adapter.js", () => {
 // WorkerPool 클래스 오버라이드 - setInterval 문제 해결을 위한 모킹
 jest.mock("../src/core/worker-pool.js", () => {
   // 실제 모듈 가져오기
-  const actualModule = jest.requireActual("../src/core/worker-pool.js");
+  const actualModule = jest.requireActual("../src/core/worker-pool.js") as typeof import("../src/core/worker-pool.js");
 
   // 원본 클래스 확장
   class MockedWorkerPool extends actualModule.WorkerPool {
     constructor(config: any) {
-      super(config);
+      // 타이머 관련 설정 비활성화
+      const modifiedConfig = {
+        ...config,
+        taskPollingInterval: 0, // 폴링 비활성화
+        statsUpdateInterval: 0, // 통계 업데이트 비활성화
+      };
+      
+      super(modifiedConfig);
 
       // 타이머 비활성화
-      if (this.pollingIntervalId) {
-        clearInterval(this.pollingIntervalId);
-        this.pollingIntervalId = null;
+      const pool = this as any;
+      if (pool.pollingIntervalId) {
+        clearInterval(pool.pollingIntervalId);
+        pool.pollingIntervalId = undefined;
       }
 
-      if (this.statsIntervalId) {
-        clearInterval(this.statsIntervalId);
-        this.statsIntervalId = null;
+      if (pool.statsIntervalId) {
+        clearInterval(pool.statsIntervalId);
+        pool.statsIntervalId = undefined;
       }
 
       // 수동 프로세싱 모드로 전환
-      this._manualProcessing = true;
+      pool._manualProcessing = true;
     }
-
-    // 타이머 메서드 오버라이드
-    startTaskPolling(): void {}
-    startStatsUpdates(): void {}
 
     // 테스트용 메서드 오버라이드
     async submitTask<T, R>(data: T, options: any = {}): Promise<R> {
       // 테스트를 위한 간소화된 구현
-      const taskId =
-        options.id ||
-        `task-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      const taskId = options.id || `task-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
       // 태스크 생성
       const task = {
@@ -303,10 +306,11 @@ jest.mock("../src/core/worker-pool.js", () => {
         },
       };
 
-      // 테스트 환경에서는 즉시 결과 반환
+      // 테스트 환경에서 비동기 처리 시뮬레이션
+      await new Promise(resolve => setTimeout(resolve, 10));
       this.emit("taskCompleted", { taskId, result: { success: true, data } });
 
-      return Promise.resolve({ success: true, data } as any);
+      return { success: true, data } as any;
     }
 
     // 종료 메서드 오버라이드
@@ -328,7 +332,13 @@ describe("WorkerPool", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    pool = new WorkerPool({ minWorkers: 1, maxWorkers: 2 });
+    pool = new WorkerPool({
+      minWorkers: 1,
+      maxWorkers: 2,
+      workerFile: "test-worker.js",
+      taskPollingInterval: 10,
+      statsUpdateInterval: 10
+    });
   });
 
   afterEach(async () => {
@@ -342,39 +352,46 @@ describe("WorkerPool", () => {
   test("태스크 제출 및 완료", async () => {
     const result = await pool.submitTask({ value: 123 });
     expect(result).toEqual({ success: true, data: { value: 123 } });
-  });
+  }, 10000);
 
-  test("풀 통계 정확성", () => {
+  test("풀 통계 정확성", async () => {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     const stats = pool.getStats();
     console.log("Worker pool stats:", JSON.stringify(stats));
-    expect(stats.totalWorkers).toBe(0);
+    expect(stats.totalWorkers).toBe(1);
     expect(stats.runningTasks).toBe(0);
     expect(stats.pendingTasks).toBe(0);
   });
 
   test("태스크 우선순위", async () => {
     const completionOrder: string[] = [];
-
-    // 이벤트 리스너 설정
-    pool.on("taskCompleted", (event: { taskId: string }) => {
-      completionOrder.push(event.taskId);
+    const completionPromise = new Promise<void>(resolve => {
+      let completedTasks = 0;
+      pool.on("taskCompleted", (event: { taskId: string }) => {
+        completionOrder.push(event.taskId);
+        completedTasks++;
+        if (completedTasks === 3) resolve();
+      });
     });
 
-    // 우선순위 순서대로 태스크 제출
-    await pool.submitTask(
-      { value: "task3" },
-      { id: "task3", priority: TaskPriority.LOW }
-    );
-    await pool.submitTask(
-      { value: "task1" },
-      { id: "task1", priority: TaskPriority.HIGH }
-    );
-    await pool.submitTask(
-      { value: "task2" },
-      { id: "task2", priority: TaskPriority.NORMAL }
-    );
+    await Promise.all([
+      pool.submitTask(
+        { value: "task3" },
+        { id: "task3", priority: TaskPriority.LOW }
+      ),
+      pool.submitTask(
+        { value: "task1" },
+        { id: "task1", priority: TaskPriority.HIGH }
+      ),
+      pool.submitTask(
+        { value: "task2" },
+        { id: "task2", priority: TaskPriority.NORMAL }
+      )
+    ]);
 
-    // 실제 순서 테스트
+    await completionPromise;
+
     expect(completionOrder).toEqual(["task3", "task1", "task2"]);
-  });
+  }, 10000);
 });

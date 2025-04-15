@@ -1,8 +1,8 @@
 /**
  * TaskQueue 테스트
  */
-import { TaskQueue } from "../src/core/task-queue";
-import { Task, TaskPriority, TaskStatus, WorkerType } from "../src/types/index";
+import { TaskQueue } from "../src/core/task-queue.js";
+import { Task, TaskPriority, TaskStatus, WorkerType } from "../src/types/index.js";
 
 describe("TaskQueue", () => {
   let taskQueue: TaskQueue;
@@ -260,5 +260,89 @@ describe("TaskQueue", () => {
       expect(taskQueue.size()).toBe(0);
       expect(taskQueue.isEmpty()).toBe(true);
     });
+  });
+
+  it("should remove task by id", () => {
+    const queue = new TaskQueue();
+    const task1: Task = {
+      id: "task-1",
+      type: "test",
+      workerType: WorkerType.CALC,
+      data: { value: 1 },
+      status: TaskStatus.QUEUED,
+      priority: TaskPriority.NORMAL,
+      submittedAt: Date.now(),
+      options: {
+        priority: TaskPriority.NORMAL
+      }
+    };
+    const task2: Task = {
+      id: "task-2",
+      type: "test",
+      workerType: WorkerType.CALC,
+      data: { value: 2 },
+      status: TaskStatus.QUEUED,
+      priority: TaskPriority.NORMAL,
+      submittedAt: Date.now(),
+      options: {
+        priority: TaskPriority.NORMAL
+      }
+    };
+
+    queue.enqueue(task1);
+    queue.enqueue(task2);
+
+    queue.remove("task-2");
+    const allTasks = queue.getAll();
+
+    expect(allTasks.find((task: Task) => task.id === "task-2")).toBeUndefined();
+    expect(allTasks).toHaveLength(1);
+    expect(allTasks[0].id).toBe("task-1");
+  });
+
+  it("should find task by id", () => {
+    const queue = new TaskQueue();
+    const task1: Task = {
+      id: "task-1",
+      type: "test",
+      workerType: WorkerType.CALC,
+      data: { value: 1 },
+      status: TaskStatus.QUEUED,
+      priority: TaskPriority.NORMAL,
+      submittedAt: Date.now(),
+      options: {
+        priority: TaskPriority.NORMAL
+      }
+    };
+    const task2: Task = {
+      id: "task-2",
+      type: "test",
+      workerType: WorkerType.CALC,
+      data: { value: 2 },
+      status: TaskStatus.QUEUED,
+      priority: TaskPriority.NORMAL,
+      submittedAt: Date.now(),
+      options: {
+        priority: TaskPriority.NORMAL
+      }
+    };
+
+    queue.enqueue(task1);
+    queue.enqueue(task2);
+
+    const allTasks = queue.getAll();
+    const foundTask = allTasks.find((task: Task) => task.id === "task-2");
+
+    expect(foundTask).toBeDefined();
+    expect(foundTask?.id).toBe("task-2");
+  });
+
+  it("should not find non-existent task", () => {
+    const queue = new TaskQueue();
+    const allTasks = queue.getAll();
+    const task = allTasks.find(
+      (task: Task) => task.id === "non-existent-task"
+    );
+    expect(task).toBeUndefined();
   });
 });

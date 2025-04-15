@@ -1,14 +1,15 @@
 /**
  * EventHub 테스트
  */
+import { jest } from '@jest/globals';
 import {
   EventHub,
   TaskEventType,
   WorkerEventType,
   TaskEventData,
   WorkerEventData,
-} from "../src/core/event-hub";
-import { TaskStatus } from "../src/types/index";
+} from "../src/core/event-hub.js";
+import { TaskStatus } from "../src/types/index.js";
 
 describe("EventHub", () => {
   let eventHub: EventHub;
@@ -288,14 +289,14 @@ describe("EventHub", () => {
 
     test("STATE_CHANGE 이벤트 발행 및 구독", () => {
       const listener = jest.fn();
-      eventHub.on(WorkerEventType.STATE_CHANGE, listener);
+      eventHub.on(WorkerEventType.STATUS_CHANGE, listener);
 
       const workerId = "worker-1";
       const previousState = "IDLE";
       const newState = "BUSY";
       const workerType = "calc";
 
-      eventHub.emitWorkerEvent(WorkerEventType.STATE_CHANGE, {
+      eventHub.emitWorkerEvent(WorkerEventType.STATUS_CHANGE, {
         workerId,
         previousState,
         newState,
@@ -316,7 +317,7 @@ describe("EventHub", () => {
       expect(listener.mock.calls[0][0]).toHaveProperty("timestamp");
       expect(listener.mock.calls[0][0]).toHaveProperty(
         "eventType",
-        WorkerEventType.STATE_CHANGE
+        WorkerEventType.STATUS_CHANGE
       );
     });
 
@@ -325,7 +326,7 @@ describe("EventHub", () => {
       eventHub.on("workerEvent", listener);
 
       eventHub.workerCreated("worker-1", "calc");
-      eventHub.emitWorkerEvent(WorkerEventType.STATE_CHANGE, {
+      eventHub.emitWorkerEvent(WorkerEventType.STATUS_CHANGE, {
         workerId: "worker-1",
         previousState: "IDLE",
         newState: "BUSY",
@@ -342,7 +343,7 @@ describe("EventHub", () => {
       );
       expect(listener.mock.calls[1][0]).toHaveProperty(
         "type",
-        WorkerEventType.STATE_CHANGE
+        WorkerEventType.STATUS_CHANGE
       );
       expect(listener.mock.calls[2][0]).toHaveProperty(
         "type",
@@ -428,6 +429,19 @@ describe("EventHub", () => {
       expect(listener1).toHaveBeenCalledTimes(1);
       expect(listener2).toHaveBeenCalledTimes(1);
       expect(listener3).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("should emit worker events", () => {
+    const hub = new EventHub();
+    const mockCallback = jest.fn();
+
+    hub.on(WorkerEventType.STATUS_CHANGE, mockCallback);
+    hub.emit(WorkerEventType.STATUS_CHANGE, { workerId: "worker1", status: "ready" });
+
+    expect(mockCallback).toHaveBeenCalledWith({
+      workerId: "worker1",
+      status: "ready",
     });
   });
 });
