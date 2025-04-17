@@ -2,10 +2,10 @@
   "name": "@hyperviz/weather",
   "version": "0.1.6",
   "description": "Weather visualization module using OffscreenCanvas and Web Workers",
-  "main": "dist/index.js",
-  "module": "dist/index.js",
-  "browser": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/src/index.js",
+  "module": "dist/src/index.js",
+  "browser": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "type": "module",
   "author": "heartyoh@hatiolab.com",
   "license": "MIT",
@@ -20,22 +20,29 @@
   },
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "import": "./dist/src/index.js",
+      "require": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
     },
-    "./dist/*": "./dist/*"
+    "./package.json": "./package.json"
   },
   "sideEffects": false,
   "scripts": {
     "build": "tsc",
     "build:examples": "tsc -p tsconfig.examples.json",
     "start:examples": "npm run build:examples && npx serve ../..",
-    "test": "jest",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
+    "prepublishOnly": "npm run clean && npm run build",
     "dev": "tsc -w"
   },
+  "keywords": [
+    "weather",
+    "visualization",
+    "offscreencanvas",
+    "webworker"
+  ],
   "dependencies": {
     "@hyperviz/worker": "^0.1.6",
     "ol": "^10.5.0"

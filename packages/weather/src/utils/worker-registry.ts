@@ -1,5 +1,4 @@
 import { ProcessorType } from "../types/index.js";
-// ESM 환경에서 패키지 기본 진입점을 사용합니다
 import {
   WorkerPool,
   type PoolConfig,

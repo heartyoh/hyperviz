@@ -2,7 +2,6 @@ import Layer from "ol/layer/Layer.js";
 import { Map } from "ol";
 import BaseLayer from "ol/layer/Base.js";
 import { Source } from "ol/source.js";
-// ESM 환경에서 패키지 기본 진입점을 사용합니다
 import { WorkerPool } from "@hyperviz/worker";
 import {
   initializeWorkerSystem,

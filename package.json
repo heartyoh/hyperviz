@@ -8,7 +8,7 @@
   "scripts": {
     "build": "lerna run build --stream",
     "test": "jest",
-    "clean": "rimraf ./{services,packages,webcomponents,apps}/*/dist ./{services,packages,webcomponents,apps}/**/*.buildinfo ./{services,packages,webcomponents,apps}/dist/*/*.{d.ts,js,esnext,mjs} .sewing-kit",
+    "clean": "rimraf ./packages/*/dist ./packages/**/*.buildinfo ./packages/**/dist/*/*.{d.ts,js,esnext,mjs} .sewing-kit",
     "build:clean": "rm yarn.lock || echo 'yarn.lock not found.' && yarn clean && yarn install && yarn build",
     "release": "lerna publish",
     "release-beta": "lerna publish --dist-tag beta",

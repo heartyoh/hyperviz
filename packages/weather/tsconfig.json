@@ -2,19 +2,19 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "esModuleInterop": true,
     "declaration": true,
     "outDir": "./dist",
     "strict": true,
-    "esModuleInterop": true,
+    "sourceMap": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "moduleResolution": "NodeNext",
-    "lib": ["DOM", "ES2020", "WebWorker"],
-    "experimentalDecorators": true,
-    "sourceMap": true,
     "resolveJsonModule": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    "isolatedModules": true,
+    "lib": ["DOM", "ES2020", "WebWorker"]
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "include": ["src/**/*", "tests/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
