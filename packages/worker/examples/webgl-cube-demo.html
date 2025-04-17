@@ -276,7 +276,7 @@
         OffscreenCanvasManager,
         CanvasContextType,
         CanvasCommandType,
-      } from "../dist/index.js";
+      } from "../dist/src/index.js";
 
       // DOM 요소
       const canvas = document.getElementById("webglCanvas");
@@ -340,7 +340,7 @@
           canvasManager = new OffscreenCanvasManager({
             canvas: canvas,
             contextType: CanvasContextType.CONTEXT_WEBGL2,
-            workerUrl: "../dist/offcanvas/worker-scripts/webgl-worker.js",
+            workerUrl: "../dist/src/offcanvas/worker-scripts/webgl-worker.js",
             workerOptions: {
               type: "module",
             },

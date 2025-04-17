@@ -13,12 +13,12 @@ import { ExampleSettings } from "../models/weather-example.js";
 import { createElement, logDebug } from "../utils/example-utils.js";
 
 // OpenLayers 모듈 직접 가져오기
-import Map from "ol/Map";
-import View from "ol/View";
-import TileLayer from "ol/layer/Tile";
-import OSM from "ol/source/OSM";
-import * as olProj from "ol/proj";
-import * as olControl from "ol/control";
+import Map from "ol/Map.js";
+import View from "ol/View.js";
+import TileLayer from "ol/layer/Tile.js";
+import OSM from "ol/source/OSM.js";
+import * as olProj from "ol/proj.js";
+import * as olControl from "ol/control.js";
 
 /**
  * 일사량 예제 컴포넌트

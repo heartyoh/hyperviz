@@ -161,7 +161,7 @@
           "ol/layer/Image": "https://cdn.skypack.dev/ol/layer/Image",
           "ol/proj": "https://cdn.skypack.dev/ol/proj",
           "ol/extent": "https://cdn.skypack.dev/ol/extent",
-          "@hyperviz/worker": "/node_modules/@hyperviz/worker/dist/index.js",
+          "@hyperviz/worker": "/node_modules/@hyperviz/worker/dist/src/index.js",
           "eventemitter3": "https://esm.sh/eventemitter3@5.0.1",
           "crypto": "https://esm.sh/crypto-browserify@3.12.0"
         }
@@ -169,6 +169,6 @@
     </script>
 
     <!-- 실제 빌드 환경에서는 번들된 파일을 사용하지만, 데모에서는 직접 소스 참조 -->
-    <script type="module" src="./index.js"></script>
+    <script type="module" src="../dist/examples/src/example.js"></script>
   </body>
 </html>

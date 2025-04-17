@@ -416,7 +416,7 @@
         OffscreenCanvasManager,
         CanvasContextType,
         CanvasCommandType,
-      } from "../dist/index.js";
+      } from "../dist/src/index.js";
 
       // 상수 정의
       const PARTICLE_COMMAND_START_EFFECT = "startEffect";
@@ -515,7 +515,7 @@
             canvas: canvas,
             contextType: CanvasContextType.CONTEXT_WEBGL2,
             workerUrl:
-              "../dist/offcanvas/worker-scripts/particle-system-worker.js",
+              "../dist/src/offcanvas/worker-scripts/particle-system-worker.js",
             workerOptions: {
               type: "module",
             },

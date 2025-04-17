@@ -2,7 +2,7 @@
  * 이벤트 스트림 사용 예제 (TypeScript)
  */
 
-import { WorkerPool, TaskPriority, WorkerType } from "../dist/index.js";
+import { WorkerPool, TaskPriority, WorkerType } from "../dist/src/index.js";
 
 // EventStream 인터페이스 정의
 interface EventStream {

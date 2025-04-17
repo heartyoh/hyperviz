@@ -332,12 +332,12 @@
     </script>
 
     <script type="module">
-      import { ImageProcessor } from "../dist/index.js";
+      import { ImageProcessor } from "../dist/src/index.js";
       import {
         CacheStorageType,
         ImageFormat,
         ImageProcessorEvents,
-      } from "../dist/imaging/types.js";
+      } from "../dist/src/imaging/types.js";
 
       let imageProcessor;
       let originalImageData = null;
@@ -406,7 +406,7 @@
             SMALL: 0.25,
             TINY: 0.1,
           },
-          workerUrl: "../dist/imaging/worker-scripts/image-worker.js",
+          workerUrl: "../dist/src/imaging/worker-scripts/image-worker.js",
           onReady: () => {
             isProcessorReady = true;
             logInfo("이미지 프로세서 준비 완료");
@@ -683,7 +683,8 @@
       // 캐시 통계 업데이트
       function updateStats() {
         if (!imageProcessor) {
-          statsContent.innerHTML = "<p>이미지 프로세서가 초기화되지 않았습니다.</p>";
+          statsContent.innerHTML =
+            "<p>이미지 프로세서가 초기화되지 않았습니다.</p>";
           return;
         }
 

@@ -30,7 +30,8 @@ export class WeatherService {
    */
   constructor(options: WeatherServiceOptions = {}) {
     this.apiKey = options.apiKey;
-    this.endpoint = options.endpoint || "https://api.weather.example.com/v1";
+    this.endpoint =
+      options.endpoint || "https://api.open-meteo.com/v1/forecast";
 
     if (options.updateInterval) {
       this.updateInterval = options.updateInterval * 1000; // 초 단위를 밀리초로 변환
@@ -275,7 +276,7 @@ export class WeatherService {
 
     // 실제 API 호출
     try {
-      const url = new URL(`${this.endpoint}/weather`);
+      const url = new URL(`${this.endpoint}`);
       url.searchParams.append("lat", location.lat.toString());
       url.searchParams.append("lon", location.lon.toString());
 

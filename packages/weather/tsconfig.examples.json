@@ -3,8 +3,12 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": ".",
-    "module": "ES2020",
-    "target": "ES2020"
+    "module": "NodeNext",
+    "target": "ES2020",
+    "baseUrl": ".",
+    "paths": {
+      "ol/*": ["node_modules/ol/*"]
+    }
   },
   "include": ["examples/**/*", "src/**/*"],
   "exclude": ["node_modules", "dist", "tests"]
