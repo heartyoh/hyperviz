@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.1.8](https://github.com/hyperviz/weather/compare/v0.1.7...v0.1.8) (2025-04-17)
+
+
+### :bug: Bug Fix
+
+* adjust build path ([01b5797](https://github.com/hyperviz/weather/commit/01b5797f5a3ad6ac66a389ae702efe60bfb79d66))
+
+
+
 ## [0.1.7](https://github.com/hyperviz/weather/compare/v0.1.6...v0.1.7) (2025-04-17)
 
 
