@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.1.7](https://github.com/heartyoh/hyperviz/compare/v0.1.6...v0.1.7) (2025-04-17)
+
+
+### :bug: Bug Fix
+
+* esm type ([9d07812](https://github.com/heartyoh/hyperviz/commit/9d07812bb82484e5bc4cb672939b18d320358a9a))
+
+
+
 ## [0.1.6](https://github.com/heartyoh/hyperviz/compare/v0.1.5...v0.1.6) (2025-04-17)
 
 

@@ -1,6 +1,6 @@
 {
   "name": "@hyperviz/weather",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Weather visualization module using OffscreenCanvas and Web Workers",
   "main": "dist/src/index.js",
   "module": "dist/src/index.js",
