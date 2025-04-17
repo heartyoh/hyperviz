@@ -24,7 +24,7 @@
       "require": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts"
     },
-    "./dist/*": "./dist/*"
+    "./package.json": "./package.json"
   },
   "sideEffects": false,
   "scripts": {

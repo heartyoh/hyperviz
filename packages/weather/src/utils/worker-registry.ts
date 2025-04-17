@@ -1,5 +1,10 @@
 import { ProcessorType } from "../types/index.js";
-import { WorkerPool, PoolConfig, TaskOptions } from "@hyperviz/worker";
+// ESM 환경에서 패키지 기본 진입점을 사용합니다
+import {
+  WorkerPool,
+  type PoolConfig,
+  type TaskOptions,
+} from "@hyperviz/worker";
 
 /**
  * 날씨 모듈 워커 시스템 옵션

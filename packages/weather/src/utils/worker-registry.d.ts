@@ -1,5 +1,5 @@
 import { ProcessorType } from "../types/index.js";
-import { WorkerPool, PoolConfig } from "@hyperviz/worker";
+import { WorkerPool, type PoolConfig } from "@hyperviz/worker";
 /**
  * 날씨 모듈 워커 시스템 옵션
  */
