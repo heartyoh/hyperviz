@@ -1,4 +1,4 @@
-import { WeatherDataBase, ProcessorType } from "../types";
+import { WeatherDataBase, ProcessorType } from "../types/index.js";
 
 /**
  * 날씨 프로세서의 기본 클래스

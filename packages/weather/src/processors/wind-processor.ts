@@ -1,5 +1,5 @@
-import { BaseProcessor } from "./base-processor";
-import { ProcessorType, WeatherDataBase } from "../types";
+import { BaseProcessor } from "./base-processor.js";
+import { ProcessorType, WeatherDataBase } from "../types/index.js";
 
 /**
  * 바람 움직임 파티클

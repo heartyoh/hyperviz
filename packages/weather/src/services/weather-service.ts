@@ -3,7 +3,7 @@ import {
   WeatherGridDataBase,
   WeatherServiceOptions,
   LocationBase,
-} from "../types";
+} from "../types/index.js";
 
 // IndexedDB 캐시 설정
 const DB_NAME = "hyperviz-weather-cache";

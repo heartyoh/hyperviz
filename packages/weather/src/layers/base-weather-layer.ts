@@ -1,7 +1,7 @@
-import Layer from "ol/layer/Layer";
+import Layer from "ol/layer/Layer.js";
 import { Map } from "ol";
-import BaseLayer from "ol/layer/Base";
-import { Source } from "ol/source";
+import BaseLayer from "ol/layer/Base.js";
+import { Source } from "ol/source.js";
 import { WorkerPool } from "@hyperviz/worker";
 import {
   initializeWorkerSystem,

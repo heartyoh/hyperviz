@@ -1,4 +1,4 @@
-import { ProcessorType } from "../types";
+import { ProcessorType } from "../types/index.js";
 import { WorkerPool, PoolConfig, TaskOptions } from "@hyperviz/worker";
 
 /**

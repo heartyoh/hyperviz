@@ -1,4 +1,4 @@
-import { WeatherData, WeatherLayerType } from "./weather-types";
+import { WeatherData, WeatherLayerType } from "./weather-types.js";
 
 /**
  * 워커 프로세서 타입

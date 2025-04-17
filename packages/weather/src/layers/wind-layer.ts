@@ -1,12 +1,12 @@
 import { Map } from "ol";
-import BaseLayer from "ol/layer/Base";
-import ImageLayer from "ol/layer/Image";
-import ImageCanvasSource from "ol/source/ImageCanvas";
-import { getVectorContext } from "ol/render";
-import { fromLonLat } from "ol/proj";
-import Layer from "ol/layer/Layer";
-import { Extent } from "ol/extent";
-import { Size } from "ol/size";
+import BaseLayer from "ol/layer/Base.js";
+import ImageLayer from "ol/layer/Image.js";
+import ImageCanvasSource from "ol/source/ImageCanvas.js";
+import { getVectorContext } from "ol/render.js";
+import { fromLonLat } from "ol/proj.js";
+import Layer from "ol/layer/Layer.js";
+import { Extent } from "ol/extent.js";
+import { Size } from "ol/size.js";
 
 import { BaseWeatherLayer, WeatherLayerOptions } from "./base-weather-layer.js";
 import {

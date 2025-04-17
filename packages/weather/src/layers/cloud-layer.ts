@@ -1,8 +1,8 @@
 import { Map } from "ol";
-import BaseLayer from "ol/layer/Base";
-import ImageLayer from "ol/layer/Image";
-import ImageCanvasSource from "ol/source/ImageCanvas";
-import { Extent } from "ol/extent";
+import BaseLayer from "ol/layer/Base.js";
+import ImageLayer from "ol/layer/Image.js";
+import ImageCanvasSource from "ol/source/ImageCanvas.js";
+import { Extent } from "ol/extent.js";
 
 import { BaseWeatherLayer } from "./base-weather-layer.js";
 import {

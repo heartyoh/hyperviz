@@ -1,9 +1,9 @@
-import { WeatherLayerOptions } from "../layers/base-weather-layer";
+import { WeatherLayerOptions } from "../layers/base-weather-layer.js";
 import {
   WeatherData as OriginalWeatherData,
   WeatherGridData as OriginalWeatherGridData,
   Location as OriginalLocation,
-} from "./weather-types";
+} from "./weather-types.js";
 
 /**
  * 날씨 레이어 타입 정의
@@ -116,5 +116,5 @@ export interface CloudRenderOptions extends WeatherLayerOptions {
   [key: string]: any;
 }
 
-export * from "./weather-types";
-export * from "./worker-types";
+export * from "./weather-types.js";
+export * from "./worker-types.js";
