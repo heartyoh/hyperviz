@@ -11,11 +11,11 @@
   "license": "MIT",
   "publishConfig": {
     "access": "public",
-    "@hyperviz:registry": "https://registry.npmjs.org"
+    "registry": "https://npm.pkg.github.com"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hyperviz/worker.git",
+    "url": "git+https://github.com/hyperviz/hyperviz.git",
     "directory": "packages/worker"
   },
   "exports": {
