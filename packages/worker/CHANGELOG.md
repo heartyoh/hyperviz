@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.1](https://github.com/hyperviz/hyperviz/compare/v0.2.0...v0.2.1) (2025-04-19)
+
+**Note:** Version bump only for package @hyperviz/worker
+
+
+
+
+
 ## [0.2.0](https://github.com/hyperviz/hyperviz/compare/v0.1.8...v0.2.0) (2025-04-19)
 
 

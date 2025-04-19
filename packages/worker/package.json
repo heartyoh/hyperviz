@@ -1,6 +1,6 @@
 {
   "name": "@hyperviz/worker",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "효율적인 워커 관리 라이브러리",
   "main": "dist/src/index.js",
   "module": "dist/src/index.js",
@@ -60,5 +60,6 @@
   },
   "dependencies": {
     "eventemitter3": "^5.0.0"
-  }
+  },
+  "gitHead": "d88ce439dd774e2b08f9645368a1c8bd01ca3c20"
 }

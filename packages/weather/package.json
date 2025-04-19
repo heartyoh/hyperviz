@@ -1,6 +1,6 @@
 {
   "name": "@hyperviz/weather",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Weather visualization module using OffscreenCanvas and Web Workers",
   "main": "dist/src/index.js",
   "module": "dist/src/index.js",
@@ -44,7 +44,7 @@
     "webworker"
   ],
   "dependencies": {
-    "@hyperviz/worker": "^0.2.0",
+    "@hyperviz/worker": "^0.2.1",
     "ol": "^10.5.0"
   },
   "devDependencies": {
@@ -54,5 +54,6 @@
     "rimraf": "^6.0.0",
     "ts-jest": "^29.1.0",
     "typescript": "^5.0.0"
-  }
+  },
+  "gitHead": "d88ce439dd774e2b08f9645368a1c8bd01ca3c20"
 }
