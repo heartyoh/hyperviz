@@ -1,5 +1,11 @@
 # Hyperviz
 
+[![npm version](https://img.shields.io/npm/v/@hyperviz/worker.svg)](https://www.npmjs.com/package/@hyperviz/worker)
+[![npm version](https://img.shields.io/npm/v/@hyperviz/weather.svg)](https://www.npmjs.com/package/@hyperviz/weather)
+[![Build Status](https://img.shields.io/github/workflow/status/yourusername/hyperviz/CI)](https://github.com/yourusername/hyperviz/actions)
+[![License](https://img.shields.io/npm/l/@hyperviz/worker)](https://github.com/yourusername/hyperviz/blob/main/LICENSE)
+[![TypeScript](https://img.shields.io/badge/%3C%2F%3E-TypeScript-%230074c1.svg)](http://www.typescriptlang.org/)
+
 A high-performance visualization and processing system that leverages multi-threading and OffscreenCanvas for complex data visualization and processing tasks. Designed with AI Assistant-driven development in mind, Hyperviz provides an ecosystem optimized for AI-assisted software development.
 
 ## Overview
@@ -147,8 +153,25 @@ Specialized module for weather data visualization and processing.
   - Automated documentation
   - Testing utilities
 
+## Package Versions
+
+| Package | Version | Description |
+|---------|---------|-------------|
+| [@hyperviz/worker](https://www.npmjs.com/package/@hyperviz/worker) | ![npm version](https://img.shields.io/npm/v/@hyperviz/worker) | Core worker management system |
+| [@hyperviz/weather](https://www.npmjs.com/package/@hyperviz/weather) | ![npm version](https://img.shields.io/npm/v/@hyperviz/weather) | Weather data visualization module |
+
 ## Installation
 
+### Via npm
+```bash
+# Install the worker package
+npm install @hyperviz/worker
+
+# Install the weather package
+npm install @hyperviz/weather
+```
+
+### From Source
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/hyperviz.git
@@ -292,4 +315,67 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Node.js team for the worker_threads implementation
 - WebGPU and OffscreenCanvas contributors
 - AI development tool contributors
-- All contributors and maintainers 
+- All contributors and maintainers
+
+## Package Dependencies
+
+### @hyperviz/worker
+- Node.js >= 16
+- TypeScript >= 4.5
+- worker_threads
+- events
+- os
+
+### @hyperviz/weather
+- Node.js >= 16
+- TypeScript >= 4.5
+- @hyperviz/worker
+- axios
+- canvas
+
+## Development with npm
+
+### Linking Packages Locally
+```bash
+# In the hyperviz root directory
+yarn link
+
+# In each package directory
+cd packages/worker
+yarn link
+cd ../weather
+yarn link
+
+# In your project
+yarn link @hyperviz/worker @hyperviz/weather
+```
+
+### Publishing
+```bash
+# Build packages
+yarn build
+
+# Publish to npm
+cd packages/worker
+npm publish
+cd ../weather
+npm publish
+```
+
+## Package Scripts
+
+### @hyperviz/worker
+```bash
+npm run build     # Build the package
+npm run test      # Run tests
+npm run lint      # Run linter
+npm run docs      # Generate documentation
+```
+
+### @hyperviz/weather
+```bash
+npm run build     # Build the package
+npm run test      # Run tests
+npm run lint      # Run linter
+npm run docs      # Generate documentation
+``` 
