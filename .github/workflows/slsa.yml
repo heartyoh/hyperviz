@@ -1,29 +1,47 @@
-name: SLSA Build
+name: SLSA
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '16'
+          node-version: '20'
           
       - name: Install dependencies
         run: yarn install
         
       - name: Build packages
         run: yarn build
-        
-      - name: Generate SLSA provenance
-        uses: slsa-framework/slsa-github-generator@v1.6.0
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          base64-subjects: true
-          upload-assets: true 
+          name: dist
+          path: packages/*/dist
+
+  provenance:
+    needs: [build]
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v1.9.0
+    with:
+      base64-subjects: "${{ needs.build.outputs.hashes }}"
+      upload-assets: true 
