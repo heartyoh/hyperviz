@@ -1,20 +1,24 @@
 {
   "name": "hyperviz",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "build": "yarn workspaces run build",
-    "test": "yarn workspaces run test",
-    "lint": "yarn workspaces run lint",
-    "clean": "yarn workspaces run clean"
+    "build": "lerna run build --stream",
+    "test": "jest",
+    "clean": "rimraf ./packages/*/dist ./packages/**/*.buildinfo ./packages/**/dist/*/*.{d.ts,js,esnext,mjs} .sewing-kit",
+    "build:clean": "rm yarn.lock || echo 'yarn.lock not found.' && yarn clean && yarn install && yarn build",
+    "release": "lerna publish",
+    "release-beta": "lerna publish --dist-tag beta",
+    "release:force": "lerna publish --force-publish=*"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0",
-    "yarn": "^1.22.0"
+    "conventional-changelog-conventionalcommits": "^7.0.2",
+    "http-server": "^14.1.1",
+    "lerna": "^8.2.1",
+    "serve": "^14.2.0"
   },
   "engines": {
     "node": ">=18.0.0"

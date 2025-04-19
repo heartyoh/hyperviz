@@ -1,7 +1,7 @@
 {
   "name": "@hyperviz/weather",
-  "version": "0.0.1",
-  "description": "Weather data visualization module",
+  "version": "0.1.8",
+  "description": "Weather visualization module using OffscreenCanvas and Web Workers",
   "main": "dist/src/index.js",
   "module": "dist/src/index.js",
   "browser": "dist/src/index.js",
@@ -31,8 +31,7 @@
     "build": "tsc",
     "build:examples": "tsc -p tsconfig.examples.json",
     "start:examples": "npm run build:examples && npx serve ../..",
-    "test": "jest",
-    "lint": "eslint src --ext .ts",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
     "prepublishOnly": "npm run clean && npm run build",
@@ -46,18 +45,14 @@
   ],
   "dependencies": {
     "@hyperviz/worker": "^0.1.8",
-    "axios": "^1.0.0",
-    "canvas": "^2.0.0"
+    "ol": "^10.5.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
-    "@types/node": "^20.0.0",
-    "@typescript-eslint/eslint-plugin": "^5.0.0",
-    "@typescript-eslint/parser": "^5.0.0",
-    "eslint": "^8.0.0",
-    "jest": "^29.0.0",
-    "rimraf": "^3.0.0",
-    "ts-jest": "^29.0.0",
+    "@types/node": "^22.14.1",
+    "jest": "^29.5.0",
+    "rimraf": "^6.0.0",
+    "ts-jest": "^29.1.0",
     "typescript": "^5.0.0"
   }
 }
