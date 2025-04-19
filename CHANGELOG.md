@@ -3,6 +3,30 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.0](https://github.com/hyperviz/hyperviz/compare/v0.1.8...v0.2.0) (2025-04-19)
+
+
+### :rocket: New Features
+
+* add resource monitoring to worker module docs: add AI assistant workflow guidelines ([e6ee264](https://github.com/hyperviz/hyperviz/commit/e6ee2643a5165dade4cda5198db88b26b071dd09))
+
+
+### :bug: Bug Fix
+
+* documents ([f6d5f0b](https://github.com/hyperviz/hyperviz/commit/f6d5f0b7eb05c8658b54b7ac93ba08c8cce7de15))
+
+
+### :memo: Documentation
+
+* add project metadata for GitHub display ([582de3a](https://github.com/hyperviz/hyperviz/commit/582de3a05193fff8c239bd832ddbfd45d4d7de08))
+
+
+### :mega: Other
+
+* update package registry to GitHub Packages ([793ced5](https://github.com/hyperviz/hyperviz/commit/793ced5f5085b753c3289bb2a037e2413378d903))
+
+
+
 ## [0.1.8](https://github.com/heartyoh/hyperviz/compare/v0.1.7...v0.1.8) (2025-04-17)
 
 
