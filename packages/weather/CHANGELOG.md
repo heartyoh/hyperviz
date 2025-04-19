@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.4](https://github.com/hyperviz/weather/compare/v0.2.3...v0.2.4) (2025-04-19)
+
+
+### :bug: Bug Fix
+
+* revoke npmrc ([b183127](https://github.com/hyperviz/weather/commit/b1831279d34c3c8bb9aa731ff16516d5fcc3d65a))
+
+
+
 ## [0.2.3](https://github.com/hyperviz/weather/compare/v0.2.2...v0.2.3) (2025-04-19)
 
 **Note:** Version bump only for package @hyperviz/weather
