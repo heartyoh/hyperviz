@@ -1,26 +1,59 @@
 # Hyperviz
 
-A modular system for efficient task processing and weather data handling.
+A high-performance visualization and processing system that leverages multi-threading and OffscreenCanvas for complex data visualization and processing tasks.
 
 ## Overview
 
-Hyperviz is a TypeScript-based system that provides:
-- Efficient worker pool management
-- Task processing with priority handling
-- Resource monitoring and optimization
-- Weather data processing capabilities
+Hyperviz is a TypeScript-based system designed for high-performance visualization and data processing, offering:
+
+- **Advanced Visualization Processing**
+  - GPU-accelerated rendering through OffscreenCanvas
+  - Multi-threaded image and data processing
+  - Real-time visualization updates
+  - High-fidelity rendering capabilities
+
+- **Efficient Task Management**
+  - Dynamic worker pool with intelligent scaling
+  - Priority-based task scheduling
+  - Resource-aware processing
+  - Low-latency task execution
+
+- **Robust Architecture**
+  - Modular design for easy extension
+  - Type-safe implementation
+  - Event-driven communication
+  - Comprehensive monitoring and optimization
+
+Hyperviz excels in scenarios requiring:
+- Complex data visualization
+- Real-time rendering
+- High-performance image processing
+- Resource-intensive computations
+- Scalable task processing
 
 ## Modules
 
 ### @hyperviz/worker
-Core worker management system for task processing.
+Core worker management system optimized for visualization and processing tasks.
 
 #### Features
-- Dynamic worker pool management
-- Priority-based task scheduling
-- Resource monitoring (CPU, memory)
-- Event-driven architecture
-- Type-safe implementation
+- **High-Performance Processing**
+  - Multi-threaded task execution
+  - GPU-accelerated rendering support
+  - Efficient memory management
+  - Real-time performance monitoring
+
+- **Advanced Task Management**
+  - Dynamic worker pool management
+  - Priority-based task scheduling
+  - Resource monitoring (CPU, memory, GPU)
+  - Intelligent workload distribution
+
+- **Robust Architecture**
+  - Event-driven architecture
+  - Type-safe implementation
+  - Comprehensive error handling
+  - Performance optimization tools
 
 #### Installation
 ```bash
@@ -37,26 +70,41 @@ const pool = new WorkerPool({
   resourceMonitoring: {
     interval: 5000,
     cpuThreshold: 80,
-    memoryThreshold: 90
+    memoryThreshold: 90,
+    gpuThreshold: 85
   }
 });
 
-// Submit a task
+// Submit a visualization task
 const result = await pool.submitTask({
-  type: 'process',
-  data: { /* task data */ },
+  type: 'visualization',
+  data: { 
+    canvas: offscreenCanvas,
+    renderData: complexData,
+    options: {
+      quality: 'high',
+      realtime: true
+    }
+  },
   priority: 'high'
 });
 ```
 
 ### @hyperviz/weather
-Weather data processing module.
+Specialized module for weather data visualization and processing.
 
 #### Features
-- Weather data collection and processing
-- Data caching and optimization
-- Integration with weather APIs
-- Type-safe data handling
+- **Advanced Visualization**
+  - Real-time weather data rendering
+  - Dynamic map updates
+  - High-resolution weather patterns
+  - Interactive data exploration
+
+- **Data Processing**
+  - Weather data collection and processing
+  - Data caching and optimization
+  - Integration with weather APIs
+  - Type-safe data handling
 
 #### Installation
 ```bash
@@ -69,6 +117,7 @@ yarn add @hyperviz/weather
 - Node.js >= 16
 - Yarn >= 1.22
 - TypeScript >= 4.5
+- Modern browser with OffscreenCanvas support
 
 ### Setup
 ```bash
@@ -95,12 +144,14 @@ See [AI_ASSISTANT_WORKFLOW.md](AI_ASSISTANT_WORKFLOW.md) for detailed developmen
 - Priority-based task scheduling
 - Resource monitoring and optimization
 - Event-driven communication
+- GPU resource management
 
 ### Weather Module
 - Modular data processing
 - Efficient caching system
 - API integration layer
 - Type-safe data structures
+- Real-time visualization pipeline
 
 ## Contributing
 
@@ -117,4 +168,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - TypeScript team for the excellent type system
 - Node.js team for the worker_threads implementation
+- WebGPU and OffscreenCanvas contributors
 - All contributors and maintainers 
