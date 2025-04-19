@@ -39,6 +39,32 @@ Hyperviz excels in scenarios requiring:
 - Scalable task processing
 - AI-assisted development workflows
 
+## Features
+
+- **Worker Management**
+  - Dynamic worker creation
+  - Resource monitoring
+  - Task distribution
+  - Error handling
+
+- **Event System**
+  - Real-time event emission
+  - Type-safe events
+  - Event streaming
+  - Error tracking
+
+- **Resource Monitoring**
+  - CPU usage tracking
+  - Memory usage monitoring
+  - Resource thresholds
+  - Warning system
+
+- **AI Development Support**
+  - Type-safe interfaces
+  - Consistent patterns
+  - Comprehensive documentation
+  - Automated testing
+
 ## AI Assistant Development Features
 
 ### 1. Code Structure and Organization
@@ -99,41 +125,6 @@ Core worker management system optimized for visualization and processing tasks.
   - Detailed logging and monitoring
   - Automated documentation generation
 
-#### Installation
-```bash
-yarn add @hyperviz/worker
-```
-
-#### Usage
-```typescript
-import { WorkerPool } from '@hyperviz/worker';
-
-const pool = new WorkerPool({
-  minWorkers: 1,
-  maxWorkers: 4,
-  resourceMonitoring: {
-    interval: 5000,
-    cpuThreshold: 80,
-    memoryThreshold: 90,
-    gpuThreshold: 85
-  }
-});
-
-// Submit a visualization task
-const result = await pool.submitTask({
-  type: 'visualization',
-  data: { 
-    canvas: offscreenCanvas,
-    renderData: complexData,
-    options: {
-      quality: 'high',
-      realtime: true
-    }
-  },
-  priority: 'high'
-});
-```
-
 ### @hyperviz/weather
 Specialized module for weather data visualization and processing.
 
@@ -156,10 +147,58 @@ Specialized module for weather data visualization and processing.
   - Automated documentation
   - Testing utilities
 
-#### Installation
+## Installation
+
 ```bash
-yarn add @hyperviz/weather
+# Clone the repository
+git clone https://github.com/yourusername/hyperviz.git
+
+# Install dependencies
+cd hyperviz
+yarn install
 ```
+
+## Usage
+
+### Basic Setup
+
+```typescript
+import { WorkerManager } from '@hyperviz/worker';
+
+const manager = new WorkerManager({
+  maxWorkers: 4,
+  workerScript: './worker.js'
+});
+
+await manager.initialize();
+```
+
+### Task Processing
+
+```typescript
+const task = {
+  id: 'task-1',
+  type: 'process',
+  data: { /* task data */ }
+};
+
+const result = await manager.processTask(task);
+```
+
+### Event Handling
+
+```typescript
+manager.on('task', (event) => {
+  console.log(`Task ${event.taskId} ${event.type}`);
+});
+```
+
+## Documentation
+
+- [API Documentation](docs/api.md)
+- [Examples](docs/examples.md)
+- [Contributing](CONTRIBUTING.md)
+- [Testing](TESTING.md)
 
 ## Development
 
@@ -169,23 +208,39 @@ yarn add @hyperviz/weather
 - TypeScript >= 4.5
 - Modern browser with OffscreenCanvas support
 
-### Setup
-```bash
-# Install dependencies
-yarn install
+### Project Structure
 
-# Build all modules
-yarn build
-
-# Build examples
-yarn build:examples
-
-# Run tests
-yarn test
+```
+packages/
+  ├── worker/           # Worker implementation
+  │   ├── src/         # Source code
+  │   ├── tests/       # Test files
+  │   └── examples/    # Example implementations
+  └── weather/         # Weather package
+      ├── src/         # Source code
+      ├── tests/       # Test files
+      └── examples/    # Example implementations
 ```
 
-### Development Guidelines
-See [AI_ASSISTANT_WORKFLOW.md](AI_ASSISTANT_WORKFLOW.md) for detailed development guidelines optimized for AI-assisted development.
+### Building
+
+```bash
+# Build all packages
+yarn build
+
+# Build specific package
+yarn build:worker
+```
+
+### Testing
+
+```bash
+# Run all tests
+yarn test
+
+# Run specific package tests
+yarn test:worker
+```
 
 ## Architecture
 
@@ -229,7 +284,7 @@ See [AI_ASSISTANT_WORKFLOW.md](AI_ASSISTANT_WORKFLOW.md) for detailed developmen
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
