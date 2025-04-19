@@ -3,9 +3,10 @@
     "packages/*"
   ],
   "npmClient": "yarn",
-  "version": "0.2.4",
+  "version": "0.2.8",
   "command": {
     "publish": {
+      "registry": "https://registry.npmjs.org/",
       "access": "public",
       "skipNpm": false,
       "ignoreChanges": [
