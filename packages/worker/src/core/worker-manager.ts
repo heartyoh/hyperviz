@@ -4,7 +4,7 @@
  */
 
 import { EventEmitter } from "eventemitter3";
-import { IWorker, WorkerStatus, WorkerType } from "../types/index.js";
+import { IWorker, WorkerStatus, WorkerType, ResourceStats } from "../types/index.js";
 import { WorkerAdapter } from "./worker-adapter.js";
 import { generateId } from "./utils.js";
 
@@ -24,6 +24,12 @@ export interface WorkerManagerConfig {
   workerFile?: string | ((type: string) => string);
   /** 워커 유형 */
   workerType: WorkerType | string;
+  /** 리소스 정리 주기 (밀리초) */
+  cleanupInterval?: number;
+  /** 메모리 임계치 (바이트) */
+  memoryThreshold?: number;
+  /** CPU 임계치 (퍼센트) */
+  cpuThreshold?: number;
 }
 
 /**
@@ -36,6 +42,10 @@ export interface WorkerManagerStats {
   activeWorkers: number;
   /** 유휴 워커 수 */
   idleWorkers: number;
+  /** 메모리 사용량 */
+  memoryUsage: number;
+  /** CPU 사용량 */
+  cpuUsage: number;
 }
 
 /**
@@ -74,6 +84,8 @@ export interface WorkerManagerEvents {
   workerExit: [{ workerId: string; exitCode: number }];
   /** 워커 메시지 이벤트 */
   workerMessage: [{ workerId: string; message: any }];
+  /** 리소스 경고 이벤트 */
+  resourceWarning: [{ type: 'memory' | 'cpu'; usage: number; threshold: number }];
 }
 
 /**
@@ -90,6 +102,16 @@ export class WorkerManager extends EventEmitter implements IWorkerManager {
   private isClosing: boolean = false;
   /** 설정 */
   private config: WorkerManagerConfig;
+  /** 리소스 정리 인터벌 */
+  private cleanupInterval?: NodeJS.Timeout;
+  /** 리소스 모니터링 인터벌 */
+  private monitorInterval?: NodeJS.Timeout;
+  private resourceMonitorTimer?: NodeJS.Timeout;
+  private resourceStats: ResourceStats = {
+    cpuUsage: 0,
+    memoryUsage: 0,
+    lastCheck: Date.now()
+  };
 
   /**
    * 워커 매니저 생성자
@@ -97,8 +119,100 @@ export class WorkerManager extends EventEmitter implements IWorkerManager {
    */
   constructor(config: WorkerManagerConfig) {
     super();
+    this.config = {
+      ...config,
+      cleanupInterval: config.cleanupInterval || 30000,
+      memoryThreshold: config.memoryThreshold || 1024 * 1024 * 1024, // 1GB
+      cpuThreshold: config.cpuThreshold || 80
+    };
 
-    this.config = config;
+    // 리소스 정리 주기 설정
+    this.setupResourceCleanup();
+    // 리소스 모니터링 설정
+    this.startResourceMonitoring();
+  }
+
+  /**
+   * 리소스 정리 설정
+   */
+  private setupResourceCleanup(): void {
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupResources();
+    }, this.config.cleanupInterval);
+  }
+
+  /**
+   * 리소스 모니터링 설정
+   */
+  private startResourceMonitoring(): void {
+    this.resourceMonitorTimer = setInterval(() => {
+      this.monitorResources();
+    }, this.config.cleanupInterval || 5000);
+  }
+
+  /**
+   * 리소스 정리
+   */
+  private cleanupResources(): void {
+    // 1. 종료된 워커 정리
+    for (const [id, worker] of this.workers.entries()) {
+      if (worker.isTerminated?.()) {
+        this.workers.delete(id);
+        this.workerStatus.delete(id);
+        this.clearIdleTimer(id);
+      }
+    }
+
+    // 2. 메모리 사용량 체크
+    const memoryUsage = process.memoryUsage();
+    if (memoryUsage.heapUsed > (this.config.memoryThreshold || 0)) {
+      this.forceCleanup();
+    }
+  }
+
+  /**
+   * 리소스 모니터링
+   */
+  private monitorResources(): void {
+    const stats = this.getResourceUsage();
+    this.resourceStats = stats;
+    
+    if (this.checkResourceThresholds(stats)) {
+      this.emit('resourceWarning', {
+        type: 'memory',
+        usage: stats.memoryUsage,
+        threshold: this.config.memoryThreshold || 0
+      });
+    }
+  }
+
+  private getResourceUsage(): ResourceStats {
+    const memoryUsage = process.memoryUsage();
+    const cpuUsage = process.cpuUsage();
+    return {
+      cpuUsage: (cpuUsage.user / 1000000) * 100,
+      memoryUsage: memoryUsage.heapUsed,
+      lastCheck: Date.now()
+    };
+  }
+
+  private checkResourceThresholds(stats: ResourceStats): boolean {
+    return stats.cpuUsage > (this.config.cpuThreshold || 80) ||
+           stats.memoryUsage > (this.config.memoryThreshold || 80);
+  }
+
+  /**
+   * 강제 리소스 정리
+   */
+  private forceCleanup(): void {
+    // 유휴 워커 정리
+    const idleWorkers = Array.from(this.workers.entries())
+      .filter(([, worker]) => worker.isIdle?.())
+      .sort(([, a], [, b]) => a.getLastActiveTime?.() - b.getLastActiveTime?.());
+
+    for (const [id] of idleWorkers) {
+      this.releaseWorker(id);
+    }
   }
 
   /**
@@ -263,21 +377,19 @@ export class WorkerManager extends EventEmitter implements IWorkerManager {
    * @returns 워커 매니저 통계
    */
   getStats(): WorkerManagerStats {
-    let activeWorkers = 0;
-    let idleWorkers = 0;
-
-    for (const status of this.workerStatus.values()) {
-      if (status === WorkerStatus.BUSY) {
-        activeWorkers++;
-      } else if (status === WorkerStatus.IDLE) {
-        idleWorkers++;
-      }
-    }
+    const memoryUsage = process.memoryUsage();
+    const cpuUsage = process.cpuUsage();
 
     return {
       totalWorkers: this.workers.size,
-      activeWorkers,
-      idleWorkers,
+      activeWorkers: Array.from(this.workerStatus.values()).filter(
+        (status) => status === WorkerStatus.BUSY
+      ).length,
+      idleWorkers: Array.from(this.workerStatus.values()).filter(
+        (status) => status === WorkerStatus.IDLE
+      ).length,
+      memoryUsage: memoryUsage.heapUsed,
+      cpuUsage: (cpuUsage.user / 1000000) * 100
     };
   }
 
@@ -309,11 +421,21 @@ export class WorkerManager extends EventEmitter implements IWorkerManager {
       this.clearIdleTimer(workerId);
     }
 
+    // 리소스 정리 인터벌 중지
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
+
+    // 리소스 모니터링 인터벌 중지
+    if (this.resourceMonitorTimer) {
+      clearInterval(this.resourceMonitorTimer);
+    }
+
     // 모든 워커 종료
     const terminatePromises = [];
     for (const [workerId, worker] of this.workers.entries()) {
       terminatePromises.push(
-        worker.terminate().catch((error) => {
+        worker.terminate(force).catch((error) => {
           console.error(`워커(${workerId}) 종료 중 오류:`, error);
         })
       );
@@ -325,6 +447,11 @@ export class WorkerManager extends EventEmitter implements IWorkerManager {
     // 모든 맵 초기화
     this.workers.clear();
     this.workerStatus.clear();
+
+    // 이벤트 리스너 제거
+    this.removeAllListeners();
+
+    this.isClosing = false;
   }
 
   /**
@@ -367,6 +494,21 @@ export class WorkerManager extends EventEmitter implements IWorkerManager {
     if (timer) {
       clearTimeout(timer);
       this.idleTimers.delete(workerId);
+    }
+  }
+
+  public getWorkers(): IWorker[] {
+    return Array.from(this.workers.values());
+  }
+
+  public addWorker(): void {
+    this.createWorker();
+  }
+
+  public removeIdleWorker(): void {
+    const idleWorker = this.getWorkers().find(w => !w.isBusy);
+    if (idleWorker) {
+      this.releaseWorker(idleWorker.id);
     }
   }
 }

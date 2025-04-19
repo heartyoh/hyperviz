@@ -98,4 +98,11 @@ export enum StreamStatus {
   CLOSED = "CLOSED",
   /** Error */
   ERROR = "ERROR"
+}
+
+export enum WorkerEventType {
+  STARTED = 'worker:started',
+  TERMINATED = 'worker:terminated',
+  ERROR = 'worker:error',
+  RESOURCE_WARNING = 'worker:resource-warning'
 } 

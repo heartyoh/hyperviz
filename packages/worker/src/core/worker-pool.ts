@@ -45,6 +45,22 @@ export interface WorkerPoolConfig {
   statsUpdateInterval?: number;
   /** 로깅 활성화 여부 */
   enableLogging?: boolean;
+  /** 메모리 임계치 (MB) */
+  memoryThreshold?: number;
+  /** CPU 임계치 (%) */
+  cpuThreshold?: number;
+  /** 리소스 모니터링 간격 (ms) */
+  resourceMonitorInterval?: number;
+  /** 동적 스케일링 활성화 여부 */
+  enableDynamicScaling?: boolean;
+  /** 스케일 업 임계치 (%) */
+  scaleUpThreshold?: number;
+  /** 스케일 다운 임계치 (%) */
+  scaleDownThreshold?: number;
+  /** 태스크 우선순위 기반 리소스 할당 활성화 여부 */
+  enablePriorityBasedAllocation?: boolean;
+  /** 고우선순위 태스크 리소스 할당 비율 (%) */
+  highPriorityResourceRatio?: number;
 }
 
 /**
@@ -144,6 +160,20 @@ export class WorkerPool extends EventEmitter {
   /** 스트림 매니저 */
   private streamManager: StreamManager;
 
+  /** 리소스 모니터링 타이머 */
+  private resourceMonitorTimer: NodeJS.Timeout | null = null;
+
+  /** 리소스 사용량 통계 */
+  private resourceStats: {
+    memory: number;
+    cpu: number;
+    lastUpdate: number;
+  } = {
+    memory: 0,
+    cpu: 0,
+    lastUpdate: Date.now()
+  };
+
   /**
    * WorkerPool 생성자
    * @param config 워커 풀 설정
@@ -188,6 +218,9 @@ export class WorkerPool extends EventEmitter {
 
     // 스트림 매니저 초기화
     this.streamManager = new StreamManager();
+
+    // 리소스 모니터링 설정
+    this.startResourceMonitoring();
 
     if (this.config.enableLogging) {
       logger.info(
@@ -317,6 +350,129 @@ export class WorkerPool extends EventEmitter {
     this.statsIntervalId = setInterval(() => {
       this.updateStats();
     }, this.config.statsUpdateInterval);
+  }
+
+  /**
+   * 리소스 모니터링 시작
+   */
+  private startResourceMonitoring(): void {
+    if (this.resourceMonitorTimer) {
+      clearInterval(this.resourceMonitorTimer);
+    }
+
+    const interval = this.config.resourceMonitorInterval || 5000;
+    this.resourceMonitorTimer = setInterval(() => {
+      this.monitorResources();
+    }, interval);
+  }
+
+  /**
+   * 리소스 사용량 모니터링
+   */
+  private async monitorResources(): Promise<void> {
+    try {
+      const { memory, cpu } = await this.getResourceUsage();
+      this.resourceStats = {
+        memory,
+        cpu,
+        lastUpdate: Date.now()
+      };
+
+      // 리소스 임계치 체크
+      this.checkResourceThresholds();
+
+      // 동적 스케일링
+      if (this.config.enableDynamicScaling) {
+        this.adjustWorkerCount();
+      }
+    } catch (error) {
+      this.log('error', 'Resource monitoring failed:', error);
+    }
+  }
+
+  /**
+   * 리소스 사용량 조회
+   */
+  private async getResourceUsage(): Promise<{ memory: number; cpu: number }> {
+    // TODO: 실제 리소스 사용량 측정 구현
+    return {
+      memory: 0,
+      cpu: 0
+    };
+  }
+
+  /**
+   * 리소스 임계치 체크
+   */
+  private checkResourceThresholds(): void {
+    const { memory, cpu } = this.resourceStats;
+    const { memoryThreshold, cpuThreshold } = this.config;
+
+    if (memoryThreshold && memory > memoryThreshold) {
+      this.eventHub.emitWorkerEvent(WorkerEventType.ERROR, {
+        type: 'memory',
+        value: memory,
+        threshold: memoryThreshold
+      });
+    }
+
+    if (cpuThreshold && cpu > cpuThreshold) {
+      this.eventHub.emitWorkerEvent(WorkerEventType.ERROR, {
+        type: 'cpu',
+        value: cpu,
+        threshold: cpuThreshold
+      });
+    }
+  }
+
+  /**
+   * 워커 수 동적 조정
+   */
+  private adjustWorkerCount(): void {
+    const { scaleUpThreshold, scaleDownThreshold, maxWorkers = 4, minWorkers = 1 } = this.config;
+    const { cpu } = this.resourceStats;
+    const currentWorkers = this.workerManager.getWorkers().length;
+
+    if (scaleUpThreshold && cpu > scaleUpThreshold && currentWorkers < maxWorkers) {
+      this.workerManager.addWorker();
+    } else if (scaleDownThreshold && cpu < scaleDownThreshold && currentWorkers > minWorkers) {
+      this.workerManager.removeIdleWorker();
+    }
+  }
+
+  /**
+   * 우선순위 기반 리소스 할당
+   */
+  private allocateResourcesByPriority(task: Task): void {
+    if (!this.config.enablePriorityBasedAllocation) {
+      return;
+    }
+
+    const { highPriorityResourceRatio = 70 } = this.config;
+    const totalWorkers = this.workerManager.getWorkers().length;
+    const highPriorityWorkers = Math.ceil((totalWorkers * highPriorityResourceRatio) / 100);
+
+    if (task.priority === TaskPriority.HIGH) {
+      // 고우선순위 태스크를 위한 워커 할당
+      const highPriorityWorker = this.workerManager.getWorkers()
+        .filter(w => !w.isBusy)
+        .slice(0, highPriorityWorkers)
+        .find(w => !w.currentTask);
+
+      if (highPriorityWorker) {
+        this.assignTaskToWorker(task, highPriorityWorker);
+      }
+    } else {
+      // 일반 우선순위 태스크를 위한 워커 할당
+      const normalPriorityWorker = this.workerManager.getWorkers()
+        .filter(w => !w.isBusy)
+        .slice(highPriorityWorkers)
+        .find(w => !w.currentTask);
+
+      if (normalPriorityWorker) {
+        this.assignTaskToWorker(task, normalPriorityWorker);
+      }
+    }
   }
 
   /**
@@ -1010,5 +1166,31 @@ export class WorkerPool extends EventEmitter {
    */
   private _clearAllTimeouts(): void {
     // 추가적인 타이머가 있다면 여기서 정리
+  }
+
+  /**
+   * 로그 출력
+   */
+  private log(level: 'info' | 'error', message: string, ...args: any[]): void {
+    if (this.config.enableLogging) {
+      const timestamp = new Date().toISOString();
+      const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+      if (level === 'error') {
+        console.error(logMessage, ...args);
+      } else {
+        console.log(logMessage, ...args);
+      }
+    }
+  }
+
+  private assignTaskToWorker(task: Task<any, any>, worker: any): void {
+    if (worker) {
+      worker.assignTask(task);
+      this.eventHub.emitTaskEvent(TaskEventType.STARTED, {
+        taskId: task.id,
+        workerId: worker.id,
+        timestamp: Date.now()
+      });
+    }
   }
 }

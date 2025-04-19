@@ -474,6 +474,41 @@ export class WorkerAdapter extends EventEmitter implements IWorker {
   onMessage(callback: (message: any) => void): void {
     this.on("message", callback);
   }
+
+  /** 워커가 종료되었는지 확인 */
+  isTerminated(): boolean {
+    return this.terminated;
+  }
+
+  /** 마지막 활동 시간 가져오기 */
+  getLastActiveTime(): number {
+    return this.lastActiveAt;
+  }
+
+  /** 메모리 사용량 가져오기 */
+  getMemoryUsage(): number {
+    if (this.webWorker) {
+      // 웹 워커의 경우 메모리 사용량을 직접 가져올 수 없음
+      return 0;
+    } else if (this.nodeWorker) {
+      // Node.js 워커의 경우 process.memoryUsage() 사용
+      return this.nodeWorker.memoryUsage?.()?.heapUsed || 0;
+    }
+    return 0;
+  }
+
+  /** CPU 사용량 가져오기 */
+  getCPUUsage(): number {
+    if (this.webWorker) {
+      // 웹 워커의 경우 CPU 사용량을 직접 가져올 수 없음
+      return 0;
+    } else if (this.nodeWorker) {
+      // Node.js 워커의 경우 process.cpuUsage() 사용
+      const usage = this.nodeWorker.cpuUsage?.() || { user: 0, system: 0 };
+      return (usage.user + usage.system) / 1000000; // 마이크로초를 초로 변환
+    }
+    return 0;
+  }
 }
 
 /**

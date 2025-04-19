@@ -87,6 +87,18 @@ export interface IWorker {
   /** 워커가 사용 가능한지 확인 */
   isAvailable(): boolean;
 
+  /** 워커가 종료되었는지 확인 */
+  isTerminated(): boolean;
+
+  /** 마지막 활동 시간 가져오기 */
+  getLastActiveTime(): number;
+
+  /** 메모리 사용량 가져오기 */
+  getMemoryUsage(): number;
+
+  /** CPU 사용량 가져오기 */
+  getCPUUsage(): number;
+
   /**
    * 태스크 상태 업데이트
    * @param taskId 태스크 ID
@@ -396,4 +408,10 @@ export interface WorkerPoolStats extends WorkerManagerStats {
     last10TaskDurations: number[];
     taskSuccessRate: number;
   };
+}
+
+export interface ResourceStats {
+  cpuUsage: number;
+  memoryUsage: number;
+  lastCheck: number;
 }

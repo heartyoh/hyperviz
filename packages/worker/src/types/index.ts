@@ -179,3 +179,9 @@ export interface PoolStats {
   /** 활성 태스크 수 */
   activeTasks: number;
 }
+
+export interface ResourceStats {
+  cpuUsage: number;
+  memoryUsage: number;
+  lastCheck: number;
+}
