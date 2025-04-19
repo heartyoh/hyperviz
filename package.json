@@ -2,6 +2,24 @@
   "name": "hyperviz",
   "version": "0.1.0",
   "private": true,
+  "description": "Hyperviz is a high-performance visualization framework for real-time data processing and rendering. It provides efficient worker management, event handling, and resource monitoring capabilities.",
+  "keywords": [
+    "visualization",
+    "real-time",
+    "worker",
+    "thread-pool",
+    "performance",
+    "monitoring",
+    "typescript"
+  ],
+  "homepage": "https://github.com/hyperviz/hyperviz#readme",
+  "bugs": {
+    "url": "https://github.com/hyperviz/hyperviz/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hyperviz/hyperviz.git"
+  },
   "workspaces": [
     "packages/*"
   ],
