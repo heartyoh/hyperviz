@@ -3,6 +3,7 @@
 ## My Development Checklist
 
 ### 1. Before Making Changes
+
 - [ ] Understand the existing codebase
 - [ ] Review related documentation
 - [ ] Check current build status for both modules:
@@ -17,14 +18,17 @@
   ```
 
 ### 2. During Development
+
 - [ ] Make incremental changes
 - [ ] Follow TypeScript best practices
 - [ ] Maintain type safety
 - [ ] Keep backward compatibility
 - [ ] Document changes clearly
 - [ ] Consider cross-module dependencies
+- [ ] Write all comments, documentation, examples, and code in English
 
 ### 3. After Changes
+
 - [ ] Run main builds:
   ```bash
   yarn workspace @hyperviz/worker build
@@ -46,6 +50,7 @@
 ## Quality Standards
 
 ### 1. Code Quality
+
 - Maintain strict type safety
 - Follow existing patterns
 - Write clear, maintainable code
@@ -54,6 +59,7 @@
 - Ensure consistent patterns across modules
 
 ### 2. Error Handling
+
 - Implement proper error handling
 - Use appropriate error types
 - Provide meaningful error messages
@@ -61,6 +67,7 @@
 - Handle cross-module error propagation
 
 ### 3. Performance
+
 - Monitor resource usage
 - Optimize critical paths
 - Handle edge cases
@@ -70,6 +77,7 @@
 ## Problem Resolution
 
 ### 1. When Issues Arise
+
 1. Verify build environment
 2. Check dependencies (including cross-module)
 3. Review recent changes
@@ -78,6 +86,7 @@
 6. Document findings
 
 ### 2. Common Issues
+
 - Build failures
 - Test timeouts
 - Type errors
@@ -86,6 +95,7 @@
 - Integration problems
 
 ### 3. Support Resources
+
 - Review documentation
 - Check issue tracker
 - Consult team members
@@ -95,6 +105,7 @@
 ## Continuous Improvement
 
 ### 1. Regular Checks
+
 - Review and update practices
 - Incorporate feedback
 - Stay updated with dependencies
@@ -102,6 +113,7 @@
 - Evaluate cross-module improvements
 
 ### 2. Documentation
+
 - Keep documentation current
 - Document API changes
 - Maintain examples
@@ -109,9 +121,10 @@
 - Document cross-module interactions
 
 ### 3. Code Review Focus
+
 - Type safety
 - Performance impact
 - Error handling
 - Documentation
 - Test coverage
-- Cross-module compatibility 
+- Cross-module compatibility
