@@ -1,32 +1,38 @@
 # Hyperviz Weather
 
-날씨 시각화를 위한 오프스크린캔버스 및 워커 기반 렌더링 모듈입니다.
+A high-performance, worker-based rendering module for weather visualization using OffscreenCanvas.
 
-## 주요 기능
+## Key Features
 
-- 워커 스레드를 사용한 고성능 렌더링
-- OffscreenCanvas를 활용한 메인 스레드 부하 감소
-- OpenLayers 맵과 통합을 위한 레이어 제공
-- IndexedDB를 활용한 데이터 캐싱
-- 날씨 데이터 서비스 내장
+- High-performance rendering using worker threads
+- Reduced main thread load through OffscreenCanvas
+- Layers for integration with OpenLayers maps
+- Data caching using IndexedDB
+- Built-in weather data services
 
-## 지원하는 날씨 레이어 타입
+## Supported Weather Layer Types
 
-- 바람 (Wind)
-- 강수량 (Precipitation)
-- 온도 (Temperature)
-- 일사량 (Solar)
-- 구름 (Cloud)
+- Wind
+- Precipitation
+- Temperature
+- Solar Radiation
+- Cloud Coverage
 
-## 설치
+## Installation
 
 ```bash
 npm install @hyperviz/weather
 ```
 
-## 사용법
+or
 
-### 기본 설정
+```bash
+yarn add @hyperviz/weather
+```
+
+## Usage
+
+### Basic Setup
 
 ```typescript
 import { WindLayer, initializeWorkerSystem } from "@hyperviz/weather";
@@ -35,12 +41,12 @@ import View from "ol/View";
 import TileLayer from "ol/layer/Tile";
 import OSM from "ol/source/OSM";
 
-// 워커 시스템 초기화
+// Initialize worker system
 initializeWorkerSystem({
-  poolSize: 2, // 워커 수 (기본값: 사용 가능한 CPU 코어 수)
+  poolSize: 2, // Number of workers (default: available CPU cores)
 });
 
-// OpenLayers 맵 생성
+// Create OpenLayers map
 const map = new Map({
   target: "map",
   layers: [
@@ -49,12 +55,12 @@ const map = new Map({
     }),
   ],
   view: new View({
-    center: [14135027.5, 4511307.6], // 서울
+    center: [14135027.5, 4511307.6], // Seoul
     zoom: 7,
   }),
 });
 
-// 바람 레이어 생성 및 추가
+// Create wind layer
 const windLayer = new WindLayer({
   maxSpeed: 15,
   particleDensity: 1.0,
@@ -63,66 +69,111 @@ const windLayer = new WindLayer({
   lineWidth: 1.5,
 });
 
-// 맵에 레이어 추가
+// Add layer to map
 windLayer.addToMap(map);
 ```
 
-### 날씨 데이터 설정
+### Setting Weather Data
 
 ```typescript
 import { WeatherService } from "@hyperviz/weather";
 
-// 날씨 서비스 생성
+// Create weather service
 const weatherService = new WeatherService({
-  apiKey: "your-api-key", // 선택사항
-  updateInterval: 300, // 5분 마다 업데이트 (초 단위)
+  apiKey: "your-api-key", // Optional
+  updateInterval: 300, // Update every 5 minutes (seconds)
 });
 
-// 지도 경계 좌표
+// Map boundary coordinates
 const bounds: [[number, number], [number, number]] = [
-  [124.0, 33.0], // 남서
-  [132.0, 39.0], // 북동
+  [124.0, 33.0], // Southwest
+  [132.0, 39.0], // Northeast
 ];
 
-// 날씨 데이터 가져오기
+// Fetch weather data
 weatherService.fetchWeatherData(bounds).then((weatherData) => {
-  // 레이어에 날씨 데이터 설정
+  // Set weather data to layer
   windLayer.setWeatherData(weatherData);
 });
 
-// 자동 업데이트 시작
+// Start automatic updates
 weatherService.startAutoUpdate(bounds, (weatherData) => {
   windLayer.setWeatherData(weatherData);
 });
 ```
 
-### 리소스 정리
+### Using Mock Data for Development
 
 ```typescript
-// 사용 완료 후 정리
+import { generateMockWeatherData } from "@hyperviz/weather";
+
+// Generate mock weather data
+const mockData = generateMockWeatherData({
+  bounds: [
+    [124.0, 33.0],
+    [132.0, 39.0],
+  ],
+  resolution: 0.5, // Grid resolution in degrees
+  type: "wind", // or 'precipitation', 'temperature', 'cloud', 'solar'
+});
+
+// Set mock data to layer
+windLayer.setWeatherData(mockData);
+```
+
+### Animation Control
+
+```typescript
+// Start animation
+windLayer.startAnimation();
+
+// Pause animation
+windLayer.stopAnimation();
+
+// Change animation speed
+windLayer.setOptions({ animationSpeed: 0.5 }); // 0.5x speed
+```
+
+### Resource Cleanup
+
+```typescript
+// Clean up when done
 windLayer.dispose();
 weatherService.stopAutoUpdate();
 cleanupWorkerSystem();
 ```
 
-## 오프라인 지원
+## Offline Support
 
-IndexedDB를 사용하여 날씨 데이터를 저장하므로 오프라인 환경에서도 마지막으로 캐시된 데이터를 사용할 수 있습니다.
+Weather data is stored using IndexedDB, allowing use of the last cached data in offline environments.
 
-## 의존성
+## Dependencies
 
 - OpenLayers (ol)
 - @hyperviz/worker
 
-## 브라우저 지원
+## Browser Support
 
 - Chrome 69+
 - Firefox 79+
 - Safari 16.4+
 - Edge 79+
 
-OffscreenCanvas API를 지원하는 모든 최신 브라우저에서 작동합니다.
+Works in all modern browsers that support the OffscreenCanvas API.
 
-## 라이센스
+## Examples
+
+See the `examples/` directory for working examples:
+
+- Basic weather maps
+- Weather data integration
+- Advanced visualization options
+- Layer customization
+
+## Documentation
+
+Comprehensive API documentation is available in the `docs/` directory.
+
+## License
 
 MIT

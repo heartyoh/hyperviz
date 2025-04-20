@@ -1,44 +1,81 @@
 # @hyperviz/worker
 
-효율적인 웹 워커 관리 및 병렬 처리를 위한 라이브러리입니다.
+A library for efficient web worker management and parallel processing.
 
-## 주요 기능
+## Key Features
 
-- 워커 풀 및 작업 큐 관리
-- 이벤트 스트림 지원
-- 이미지 처리 및 캐싱
-- OffscreenCanvas 지원
-- 고급 WebGL 렌더링
+- Worker pool and task queue management
+- Event stream support
+- Image processing and caching
+- OffscreenCanvas support
+- Advanced WebGL rendering
 
-## WebGL 렌더링 기능
+## WebGL Rendering Capabilities
 
-최신 버전에서는 다음과 같은 향상된 WebGL 렌더링 기능을 제공합니다:
+The latest version provides enhanced WebGL rendering capabilities:
 
-### 셰이더 관리 시스템
+### Shader Management System
 
-- 셰이더 프로그램 컴파일 및 링크 자동화
-- 유니폼 및 속성 관리 간소화
-- WebGL 2.0 셰이더 지원
+- Automated shader program compilation and linking
+- Simplified uniform and attribute management
+- WebGL 2.0 shader support
+- GLSL error detection and reporting
 
-### VAO 및 지오메트리 시스템
+### VAO and Geometry System
 
-- 버텍스 배열 객체(VAO) 지원
-- 효율적인 버퍼 관리
-- WebGL 1.0에서 VAO 확장 자동 적용
+- Vertex Array Object (VAO) support
+- Efficient buffer management
+- Automatic VAO extension application in WebGL 1.0
+- Support for complex geometry data structures
 
-### 텍스처 관리
+### Texture Management
 
-- 텍스처 로딩 및 캐싱
-- 다양한 포맷 지원
-- 자동 밉맵 생성
+- Texture loading and caching
+- Support for various formats (RGBA, RGB, Luminance, etc.)
+- Automatic mipmap generation
+- Texture atlas support for efficient rendering
 
-### 인스턴스 렌더링
+### Instance Rendering
 
-- 대량의 객체 효율적 렌더링
-- WebGL 2.0 인스턴싱 지원
-- WebGL 1.0에서 확장 자동 적용
+- Efficient rendering of large quantities of objects
+- WebGL 2.0 instancing support
+- Automatic extension application in WebGL 1.0
+- Dynamic instance data updates
 
-## 사용 예제
+## Performance Optimization
+
+- Automatic worker thread balancing
+- Transferable objects usage for zero-copy transfers
+- Task prioritization system
+- Memory management utilities
+
+## Usage Examples
+
+### Basic Worker Pool
+
+```typescript
+import { WorkerPool } from "@hyperviz/worker";
+
+// Create a worker pool
+const pool = new WorkerPool({
+  minWorkers: 2,
+  maxWorkers: 4,
+  workerFile: "worker.js",
+});
+
+// Submit a task
+const result = await pool.submitTask({
+  type: "calculation",
+  data: [1, 2, 3, 4, 5],
+});
+
+console.log("Result:", result);
+
+// Clean up when done
+await pool.shutdown();
+```
+
+### OffscreenCanvas Rendering
 
 ```typescript
 import { OffscreenCanvasManager } from "@hyperviz/worker";
@@ -50,28 +87,57 @@ const manager = new OffscreenCanvasManager({
   autoResize: true,
 });
 
-// 준비 완료 시 처리
+// Handle ready event
 manager.on("ready", () => {
-  // WebGL 렌더링 명령 전송
+  // Send WebGL rendering commands
   manager.sendCommand({
     type: "render",
     params: {
-      // 렌더링 파라미터
+      // Rendering parameters
     },
   });
 });
+
+// Handle resize events
+window.addEventListener("resize", () => {
+  manager.resize();
+});
 ```
 
-## 설치
+## Installation
 
 ```bash
 npm install @hyperviz/worker
 ```
 
-## 문서
+or
 
-자세한 API 문서는 [여기](https://example.com/docs)에서 확인하세요.
+```bash
+yarn add @hyperviz/worker
+```
 
-## 라이센스
+## Browser Compatibility
+
+- Chrome 69+
+- Firefox 79+
+- Safari 16.4+
+- Edge 79+
+
+Works in all modern browsers that support Web Workers and OffscreenCanvas.
+
+## Documentation
+
+For detailed API documentation, see the [documentation](https://github.com/hyperviz/worker/docs) or the `docs/` directory.
+
+## Examples
+
+Check the `examples/` directory for working demos:
+
+- Worker pool management
+- Image processing with workers
+- WebGL rendering with OffscreenCanvas
+- Real-time data processing
+
+## License
 
 MIT
