@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.11](https://github.com/hyperviz/weather/compare/v0.2.10...v0.2.11) (2025-04-20)
+
+
+### :bug: Bug Fix
+
+* lost link ([d543b20](https://github.com/hyperviz/weather/commit/d543b20e09bd334fa8004fd2b856d2145d9fb3af))
+
+
+
 ## [0.2.10](https://github.com/hyperviz/weather/compare/v0.2.9...v0.2.10) (2025-04-20)
 
 
