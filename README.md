@@ -2,8 +2,8 @@
 
 [![npm version](https://img.shields.io/npm/v/@hyperviz/worker.svg)](https://www.npmjs.com/package/@hyperviz/worker)
 [![npm version](https://img.shields.io/npm/v/@hyperviz/weather.svg)](https://www.npmjs.com/package/@hyperviz/weather)
-[![Build Status](https://img.shields.io/github/workflow/status/yourusername/hyperviz/CI)](https://github.com/yourusername/hyperviz/actions)
-[![License](https://img.shields.io/npm/l/@hyperviz/worker)](https://github.com/yourusername/hyperviz/blob/main/LICENSE)
+[![Build Status](https://img.shields.io/github/workflow/status/heartyoh/hyperviz/CI)](https://github.com/heartyoh/hyperviz/actions)
+[![License](https://img.shields.io/npm/l/@hyperviz/worker)](https://github.com/heartyoh/hyperviz/blob/main/LICENSE)
 [![TypeScript](https://img.shields.io/badge/%3C%2F%3E-TypeScript-%230074c1.svg)](http://www.typescriptlang.org/)
 
 A high-performance visualization and processing system that leverages multi-threading and OffscreenCanvas for complex data visualization and processing tasks. Designed with AI Assistant-driven development in mind, Hyperviz provides an ecosystem optimized for AI-assisted software development.
@@ -13,18 +13,21 @@ A high-performance visualization and processing system that leverages multi-thre
 Hyperviz is a TypeScript-based system designed for high-performance visualization and data processing, offering:
 
 - **Advanced Visualization Processing**
+
   - GPU-accelerated rendering through OffscreenCanvas
   - Multi-threaded image and data processing
   - Real-time visualization updates
   - High-fidelity rendering capabilities
 
 - **Efficient Task Management**
+
   - Dynamic worker pool with intelligent scaling
   - Priority-based task scheduling
   - Resource-aware processing
   - Low-latency task execution
 
 - **Robust Architecture**
+
   - Modular design for easy extension
   - Type-safe implementation
   - Event-driven communication
@@ -38,6 +41,7 @@ Hyperviz is a TypeScript-based system designed for high-performance visualizatio
   - AI-friendly testing and validation systems
 
 Hyperviz excels in scenarios requiring:
+
 - Complex data visualization
 - Real-time rendering
 - High-performance image processing
@@ -48,18 +52,21 @@ Hyperviz excels in scenarios requiring:
 ## Features
 
 - **Worker Management**
+
   - Dynamic worker creation
   - Resource monitoring
   - Task distribution
   - Error handling
 
 - **Event System**
+
   - Real-time event emission
   - Type-safe events
   - Event streaming
   - Error tracking
 
 - **Resource Monitoring**
+
   - CPU usage tracking
   - Memory usage monitoring
   - Resource thresholds
@@ -74,6 +81,7 @@ Hyperviz excels in scenarios requiring:
 ## AI Assistant Development Features
 
 ### 1. Code Structure and Organization
+
 - Consistent file and directory structure
 - Clear module boundaries and interfaces
 - Type-safe implementations for better AI understanding
@@ -81,6 +89,7 @@ Hyperviz excels in scenarios requiring:
 - Comprehensive type definitions
 
 ### 2. Development Workflow
+
 - Automated build and test pipelines
 - Clear development guidelines and checklists
 - Structured error handling and logging
@@ -88,6 +97,7 @@ Hyperviz excels in scenarios requiring:
 - AI-friendly commit messages and changelogs
 
 ### 3. Testing and Validation
+
 - Automated test suites with clear patterns
 - Comprehensive test documentation
 - AI-accessible test results and reports
@@ -95,6 +105,7 @@ Hyperviz excels in scenarios requiring:
 - Performance benchmarking tools
 
 ### 4. Documentation
+
 - AI-readable documentation format
 - Clear architectural diagrams
 - Comprehensive API documentation
@@ -104,22 +115,27 @@ Hyperviz excels in scenarios requiring:
 ## Modules
 
 ### @hyperviz/worker
+
 Core worker management system optimized for visualization and processing tasks.
 
 #### Features
+
 - **High-Performance Processing**
+
   - Multi-threaded task execution
   - GPU-accelerated rendering support
   - Efficient memory management
   - Real-time performance monitoring
 
 - **Advanced Task Management**
+
   - Dynamic worker pool management
   - Priority-based task scheduling
   - Resource monitoring (CPU, memory, GPU)
   - Intelligent workload distribution
 
 - **Robust Architecture**
+
   - Event-driven architecture
   - Type-safe implementation
   - Comprehensive error handling
@@ -132,16 +148,20 @@ Core worker management system optimized for visualization and processing tasks.
   - Automated documentation generation
 
 ### @hyperviz/weather
+
 Specialized module for weather data visualization and processing.
 
 #### Features
+
 - **Advanced Visualization**
+
   - Real-time weather data rendering
   - Dynamic map updates
   - High-resolution weather patterns
   - Interactive data exploration
 
 - **Data Processing**
+
   - Weather data collection and processing
   - Data caching and optimization
   - Integration with weather APIs
@@ -155,14 +175,15 @@ Specialized module for weather data visualization and processing.
 
 ## Package Versions
 
-| Package | Version | Description |
-|---------|---------|-------------|
-| [@hyperviz/worker](https://www.npmjs.com/package/@hyperviz/worker) | ![npm version](https://img.shields.io/npm/v/@hyperviz/worker) | Core worker management system |
+| Package                                                              | Version                                                        | Description                       |
+| -------------------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------- |
+| [@hyperviz/worker](https://www.npmjs.com/package/@hyperviz/worker)   | ![npm version](https://img.shields.io/npm/v/@hyperviz/worker)  | Core worker management system     |
 | [@hyperviz/weather](https://www.npmjs.com/package/@hyperviz/weather) | ![npm version](https://img.shields.io/npm/v/@hyperviz/weather) | Weather data visualization module |
 
 ## Installation
 
 ### Via npm
+
 ```bash
 # Install the worker package
 npm install @hyperviz/worker
@@ -172,9 +193,10 @@ npm install @hyperviz/weather
 ```
 
 ### From Source
+
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/hyperviz.git
+git clone https://github.com/heartyoh/hyperviz.git
 
 # Install dependencies
 cd hyperviz
@@ -186,11 +208,11 @@ yarn install
 ### Basic Setup
 
 ```typescript
-import { WorkerManager } from '@hyperviz/worker';
+import { WorkerManager } from "@hyperviz/worker";
 
 const manager = new WorkerManager({
   maxWorkers: 4,
-  workerScript: './worker.js'
+  workerScript: "./worker.js",
 });
 
 await manager.initialize();
@@ -200,9 +222,11 @@ await manager.initialize();
 
 ```typescript
 const task = {
-  id: 'task-1',
-  type: 'process',
-  data: { /* task data */ }
+  id: "task-1",
+  type: "process",
+  data: {
+    /* task data */
+  },
 };
 
 const result = await manager.processTask(task);
@@ -211,7 +235,7 @@ const result = await manager.processTask(task);
 ### Event Handling
 
 ```typescript
-manager.on('task', (event) => {
+manager.on("task", (event) => {
   console.log(`Task ${event.taskId} ${event.type}`);
 });
 ```
@@ -226,6 +250,7 @@ manager.on('task', (event) => {
 ## Development
 
 ### Prerequisites
+
 - Node.js >= 16
 - Yarn >= 1.22
 - TypeScript >= 4.5
@@ -268,6 +293,7 @@ yarn test:worker
 ## Architecture
 
 ### Worker Pool
+
 - Dynamic worker scaling based on load
 - Priority-based task scheduling
 - Resource monitoring and optimization
@@ -276,6 +302,7 @@ yarn test:worker
 - AI-friendly architectural patterns
 
 ### Weather Module
+
 - Modular data processing
 - Efficient caching system
 - API integration layer
@@ -293,12 +320,14 @@ yarn test:worker
 ## AI Assistant Development Support
 
 ### Documentation
+
 - [AI_ASSISTANT_WORKFLOW.md](AI_ASSISTANT_WORKFLOW.md) - Development workflow guidelines
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture documentation
 - [TESTING.md](TESTING.md) - Testing guidelines and patterns
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 
 ### Tools and Utilities
+
 - Automated documentation generation
 - Code analysis tools
 - Performance monitoring
@@ -320,6 +349,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Package Dependencies
 
 ### @hyperviz/worker
+
 - Node.js >= 16
 - TypeScript >= 4.5
 - worker_threads
@@ -327,6 +357,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - os
 
 ### @hyperviz/weather
+
 - Node.js >= 16
 - TypeScript >= 4.5
 - @hyperviz/worker
@@ -336,6 +367,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Development with npm
 
 ### Linking Packages Locally
+
 ```bash
 # In the hyperviz root directory
 yarn link
@@ -351,6 +383,7 @@ yarn link @hyperviz/worker @hyperviz/weather
 ```
 
 ### Publishing
+
 ```bash
 # Build packages
 yarn build
@@ -365,6 +398,7 @@ npm publish
 ## Package Scripts
 
 ### @hyperviz/worker
+
 ```bash
 npm run build     # Build the package
 npm run test      # Run tests
@@ -373,9 +407,10 @@ npm run docs      # Generate documentation
 ```
 
 ### @hyperviz/weather
+
 ```bash
 npm run build     # Build the package
 npm run test      # Run tests
 npm run lint      # Run linter
 npm run docs      # Generate documentation
-``` 
+```
