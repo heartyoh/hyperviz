@@ -163,7 +163,7 @@ Works in all modern browsers that support the OffscreenCanvas API.
 
 ## Examples
 
-See the `examples/` directory for working examples:
+See the `examples/` directory for working examples, or check our [examples documentation](../../docs/examples.md) for detailed explanations:
 
 - Basic weather maps
 - Weather data integration
@@ -172,7 +172,7 @@ See the `examples/` directory for working examples:
 
 ## Documentation
 
-Comprehensive API documentation is available in the `docs/` directory.
+For comprehensive API documentation, see the [API reference](../../docs/api.md).
 
 ## License
 
