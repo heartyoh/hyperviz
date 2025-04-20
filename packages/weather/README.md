@@ -163,7 +163,7 @@ Works in all modern browsers that support the OffscreenCanvas API.
 
 ## Examples
 
-See the `examples/` directory for working examples, or check our [examples documentation](https://github.com/hyperviz/hyperviz/blob/main/docs/examples.md) for detailed explanations:
+See the `examples/` directory for working examples, or check our [examples documentation](https://github.com/heartyoh/hyperviz/blob/main/docs/examples.md) for detailed explanations:
 
 - Basic weather maps
 - Weather data integration
@@ -172,7 +172,7 @@ See the `examples/` directory for working examples, or check our [examples docum
 
 ## Documentation
 
-For comprehensive API documentation, see the [API reference](https://github.com/hyperviz/hyperviz/blob/main/docs/api.md).
+For comprehensive API documentation, see the [API reference](https://github.com/heartyoh/hyperviz/blob/main/docs/api.md).
 
 ## License
 

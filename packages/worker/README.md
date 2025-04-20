@@ -127,7 +127,7 @@ Works in all modern browsers that support Web Workers and OffscreenCanvas.
 
 ## Documentation
 
-For comprehensive API documentation, see the [API reference](https://github.com/hyperviz/hyperviz/blob/main/docs/api.md).
+For comprehensive API documentation, see the [API reference](https://github.com/heartyoh/hyperviz/blob/main/docs/api.md).
 
 ## Examples
 
@@ -140,7 +140,7 @@ The package includes several examples demonstrating various features:
 - Event Streams - Real-time data streaming
 - Particle Effects - Complex particle simulations
 
-For more detailed examples explanation, see the [examples documentation](https://github.com/hyperviz/hyperviz/blob/main/docs/examples.md).
+For more detailed examples explanation, see the [examples documentation](https://github.com/heartyoh/hyperviz/blob/main/docs/examples.md).
 
 ## License
 
