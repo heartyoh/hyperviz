@@ -127,20 +127,20 @@ Works in all modern browsers that support Web Workers and OffscreenCanvas.
 
 ## Documentation
 
-For comprehensive API documentation, see the [API reference](../../docs/api.md).
+For comprehensive API documentation, see the [API reference](https://github.com/hyperviz/hyperviz/blob/main/docs/api.md).
 
 ## Examples
 
-Check the `examples/` directory for working demos:
+The package includes several examples demonstrating various features:
 
-- [Calculation Worker Demo](examples/calc-worker-demo.html) - Basic worker operations
-- [OffscreenCanvas Demo](examples/offcanvas-demo.html) - High-performance canvas rendering
-- [Image Processing](examples/image-processor-demo.html) - Image filters and transformations
-- [WebGL Rendering](examples/webgl-cube-demo.html) - 3D rendering with WebGL
-- [Event Streams](examples/event-stream-counter.html) - Real-time data streaming
-- [Particle Effects](examples/particle-effects-demo.html) - Complex particle simulations
+- Calculation Worker Demo - Basic worker operations
+- OffscreenCanvas Demo - High-performance canvas rendering
+- Image Processing - Image filters and transformations
+- WebGL Rendering - 3D rendering with WebGL
+- Event Streams - Real-time data streaming
+- Particle Effects - Complex particle simulations
 
-For more detailed examples explanation, see the [examples documentation](../../docs/examples.md).
+For more detailed examples explanation, see the [examples documentation](https://github.com/hyperviz/hyperviz/blob/main/docs/examples.md).
 
 ## License
 
