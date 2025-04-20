@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.10](https://github.com/hyperviz/weather/compare/v0.2.9...v0.2.10) (2025-04-20)
+
+
+### :bug: Bug Fix
+
+* documentation and AI workflow ([90e3b94](https://github.com/hyperviz/weather/commit/90e3b9463b6ccb4d3a8ed7e2e28c20d005900f85))
+
+
+
 ## [0.2.9](https://github.com/hyperviz/weather/compare/v0.2.8...v0.2.9) (2025-04-19)
 
 **Note:** Version bump only for package @hyperviz/weather
