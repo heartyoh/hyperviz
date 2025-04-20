@@ -1,6 +1,6 @@
 {
   "name": "@hyperviz/worker",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "description": "효율적인 워커 관리 라이브러리",
   "main": "dist/src/index.js",
   "module": "dist/src/index.js",

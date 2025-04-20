@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.2.12](https://github.com/hyperviz/hyperviz/compare/v0.2.11...v0.2.12) (2025-04-20)
+
+
+### :bug: Bug Fix
+
+* missing links for README.md in npmjs.com ([5b635f7](https://github.com/hyperviz/hyperviz/commit/5b635f79c0f99f22c39ac85d20ff242d151faccc))
+
+
+
 ## [0.2.11](https://github.com/hyperviz/hyperviz/compare/v0.2.10...v0.2.11) (2025-04-20)
 
 
